@@ -733,6 +733,61 @@ class TestRenderWeather:
         assert ctx["feels_like_text"] == ""
         assert ctx["date_text"] == "Saturday, 2026-05-02"
 
+    def test_weather_feels_like_uses_home_assistant_label(self) -> None:
+        # Renderer uses the supplied system label and localized number.
+        cfg = self._config(
+            language="pl",
+            states={
+                "weather.home": {
+                    "state": "sunny",
+                    "attributes": {
+                        "temperature": 11.7,
+                        "apparent_temperature": 8.8,
+                    },
+                }
+            },
+            weather_labels={"apparent_temperature": "Odczuwalna temperatura"},
+        )
+        widget = {
+            "type": "weather",
+            "entity": "weather.home",
+            "mode": "current",
+        }
+        ctx = _build_weather_context(widget, cfg)
+        assert ctx["feels_like_text"] == "Odczuwalna temperatura: 8,8°C"
+
+    def test_long_feels_like_label_fits_narrow_widget(self) -> None:
+        # A longer system translation stays centered inside card padding.
+        cfg = self._config(
+            width=220,
+            language="pl",
+            states={
+                "weather.home": {
+                    "state": "sunny",
+                    "attributes": {
+                        "temperature": -12,
+                        "apparent_temperature": -20.5,
+                    },
+                }
+            },
+            weather_labels={"apparent_temperature": "Odczuwalna temperatura"},
+        )
+        widget = {
+            "type": "weather",
+            "entity": "weather.home",
+            "mode": "current",
+            "x": 0,
+            "w": 220,
+        }
+        ctx = _build_weather_context(widget, cfg)
+        image = render_to_image([widget], cfg)
+        y = int(ctx["feels_like_y"])
+        bbox = content_bbox(image, 0, y - 10, 220, y + 10)
+        assert bbox is not None
+        assert 10 <= bbox[0] < bbox[2] <= 210
+        assert abs((bbox[0] + bbox[2]) / 2 - 110) <= 2
+        assert ctx["feels_like_font_size"] < ctx["font_sm"]
+
     def test_weather_current_mode_date_falls_back_to_today(self) -> None:
         # With no forecast data, the date string falls back to
         # _get_today() (mocked here) rather than forecast[0]'s date.

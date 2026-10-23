@@ -768,6 +768,47 @@ class TestEinkDashboardImage:
             config = mock_render.call_args[0][1]
             assert config["time_zone"] == "Europe/Berlin"
 
+    async def test_weather_system_label_forwarded_to_render(
+        self, hass: HomeAssistant, make_entity: Callable[..., Any]
+    ) -> None:
+        # The image refresh receives the same HA translation as previews.
+        from custom_components.eink_dashboard.render import render_dashboard
+
+        entity, _entry = make_entity(
+            {
+                "width": 460,
+                "height": 250,
+                "locale_language": "pl",
+            }
+        )
+        hass.states.async_set(
+            "weather.home",
+            "sunny",
+            {
+                "temperature": 11.7,
+                "apparent_temperature": 8.8,
+            },
+        )
+        entity.set_widgets(
+            [
+                {
+                    "type": "weather",
+                    "entity": "weather.home",
+                    "mode": "current",
+                }
+            ]
+        )
+        with patch(
+            "custom_components.eink_dashboard.image.render_dashboard",
+            wraps=render_dashboard,
+        ) as render:
+            await entity._async_refresh(None)
+        config = render.call_args.args[1]
+        assert config["weather_labels"] == {
+            "apparent_temperature": "Odczuwalna temperatura",
+        }
+        assert await entity.async_image() is not None
+
 
 class TestImagePlatformSetup:
     async def test_async_setup_entry(self, hass: HomeAssistant) -> None:

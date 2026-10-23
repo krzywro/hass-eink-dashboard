@@ -195,6 +195,9 @@ Missing data displays `—`. The column appears alongside current
 conditions, including the fallback when a forecast-only widget has no
 forecast data. The separate min/max bar in Current only mode is
 unaffected.
+The apparent-temperature line uses Home Assistant's translated weather
+attribute label in the display language, without a separate translation
+catalog in this integration.
 
 The Tile widget additionally supports `invert_condition` — a list of
 conditions in the same format as `visibility`. When met, the tile renders

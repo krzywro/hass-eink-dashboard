@@ -28,6 +28,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.eink_dashboard import (
     _async_get_locale,
+    _async_get_weather_labels,
     _enrich_display_precision,
     _enrich_entity_icons,
     async_setup,
@@ -512,6 +513,22 @@ def _make_hass_with_locale(
     hass.auth.async_get_owner = AsyncMock(return_value=owner)
     user_store_mock = AsyncMock(return_value=store)
     return hass, user_store_mock
+
+
+class TestWeatherLabels:
+    """Verify graceful fallback when a system catalog has no weather label."""
+
+    async def test_missing_catalog_label_uses_renderer_fallback(self) -> None:
+        # Missing keys must not leak internal translation keys into images.
+        hass = MagicMock()
+        with patch(
+            "custom_components.eink_dashboard.async_get_translations",
+            return_value={},
+        ) as translations:
+            assert await _async_get_weather_labels(hass, "pl") == {}
+        translations.assert_awaited_once_with(
+            hass, "pl", "entity_component", {"weather"}
+        )
 
 
 class TestAsyncGetLocale:

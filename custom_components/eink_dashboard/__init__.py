@@ -33,6 +33,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.icon import async_get_icons
+from homeassistant.helpers.translation import async_get_translations
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -238,6 +239,32 @@ def _ha_time_zone(hass: HomeAssistant) -> str:
     return tz if isinstance(tz, str) else ""
 
 
+async def _async_get_weather_labels(
+    hass: HomeAssistant, language: str
+) -> dict[str, str]:
+    """Load weather labels from Home Assistant's cached translation catalog.
+
+    Fetch translations on the event loop before passing plain strings to
+    the synchronous renderer. HA supplies English for untranslated keys.
+
+    Args:
+        hass: Home Assistant instance managing the translation cache.
+        language: Effective dashboard language, including device overrides.
+
+    Returns:
+        Available weather labels, empty when the catalog has no label.
+    """
+    translations = await async_get_translations(
+        hass, language, "entity_component", {"weather"}
+    )
+    key = (
+        "component.weather.entity_component._.state_attributes."
+        "apparent_temperature.name"
+    )
+    label = translations.get(key)
+    return {"apparent_temperature": label} if label else {}
+
+
 async def _build_display_config(
     hass: HomeAssistant, entry_id: str
 ) -> dict[str, Any]:
@@ -257,7 +284,7 @@ async def _build_display_config(
         ``display_levels``, ``font_dir``, ``use_system_fonts``,
         ``number_format``, ``language``, ``first_weekday``,
         ``date_format``, ``time_format``, ``time_zone``,
-        ``states``, and (when
+        ``weather_labels``, ``states``, and (when
         battery data is available) ``device_battery_level`` and
         ``device_battery_charging`` keys suitable for
         ``render_widget_svg()``.
@@ -301,6 +328,7 @@ async def _build_display_config(
         "date_format": date_format,
         "time_format": time_format,
         "time_zone": _ha_time_zone(hass),
+        "weather_labels": await _async_get_weather_labels(hass, language),
         "states": states,
     }
     level, is_charging = resolve_battery_level(
