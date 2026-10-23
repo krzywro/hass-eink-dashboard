@@ -7,8 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-23
+
 ### Added
 
+- **QR Code widget**: scannable codes generated locally from text,
+  an entity state, or an entity attribute, with an optional title
+  and selectable error correction. Invalid content or insufficient
+  space displays a placeholder explaining how to fix the widget.
+- **`show_sun_times`** option on the Weather widget: show the next
+  sunrise and sunset from `sun.sun` instead of the top-right
+  min/max and precipitation column, using Home Assistant's time
+  zone and the display's time format.
+- Heading entity badges now show the current Home Assistant icon
+  alongside each value, including state-dependent icons. Use
+  `show_icon: false` to hide the icon or `show_state: false` to
+  display only the icon; legacy per-badge `icon` overrides are
+  ignored in favor of Home Assistant's entity icon settings.
+- **`decimals`** override for the Entity, Tile, Entities, Sensor,
+  and Graph widgets to select an exact number of decimal places.
+- **List layout options** for Calendar, Entities, and Waste
+  Schedule: `row_height` caps row height, `hide_icon` removes the
+  icon column, and `divider_width` sets the separator thickness
+  (`0` hides separators). Default row height scales with the
+  display's pixel density, configurable for custom displays.
+- Custom display width and height can now be edited directly in
+  Device settings alongside pixel density.
 - Meteogram temperatures below the curve, plus wind direction arrows
   and speed with units below the hours. Both can be disabled in the
   widget editor; arrowheads point downwind.
@@ -17,6 +41,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Meteogram annotation columns now share a timestamp-based cadence,
   automatically spaced to fit the widget and selected forecast window.
+- Numeric widgets now respect Home Assistant's configured or
+  suggested sensor display precision unless overridden by the
+  widget. Humidity defaults to zero decimal places when neither
+  setting specifies a precision.
+- List rows no longer stretch to fill tall widgets; unused space
+  stays below the list and card frames wrap the rows. Dividers
+  default to one pixel on all displays, including two-level panels.
+- The Weather widget's apparent-temperature label now uses Home
+  Assistant's translation for the display language and scales to
+  fit longer labels.
+
+### Fixed
+
+- Reordering widgets no longer lets the drag event reach the
+  surrounding Lovelace Sections dashboard, preventing corrupted
+  card layouts and subsequent dashboard rendering errors (#105).
 
 ## [0.8.0] - 2026-09-30
 
@@ -330,6 +370,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release.
 
+[Unreleased]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.5.0...v0.6.0
