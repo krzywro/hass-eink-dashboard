@@ -49,6 +49,18 @@ const DEFAULT_WEATHER_MODE: WeatherMode = "full";
 // ── Widget type registry ─────────────────────────────────────────
 
 export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
+  qr_code: {
+    label: "QR Code",
+    description: "Scannable QR code from text or an entity value",
+    icon: "mdi:qrcode",
+    defaults: {
+      type: "qr_code",
+      x: 24, y: 0, w: 200, h: 200,
+      source: "text",
+      content: "",
+      error_correction: "M",
+    },
+  },
   frame: {
     label: "Frame",
     description: "Decorative rounded-corner border box",
@@ -648,8 +660,63 @@ function identitySection(): HaFormSchema {
 
 export const SCHEMAS: Record<
   string,
-  (d: DisplayConfig) => HaFormSchema[]
+  (d: DisplayConfig, widget?: Widget) => HaFormSchema[]
 > = {
+  qr_code: (d, widget) => [
+    identitySection(),
+    {
+      name: "content",
+      type: "expandable",
+      flatten: true,
+      expanded: true,
+      title: "Content",
+      icon: "mdi:qrcode",
+      schema: [
+        {
+          name: "source",
+          default: "text",
+          selector: {
+            select: {
+              options: [
+                { value: "text", label: "Text" },
+                { value: "entity", label: "Entity" },
+              ],
+              mode: "dropdown",
+            },
+          },
+        },
+        ...(widget?.type === "qr_code" && widget.source === "entity"
+          ? [
+            { name: "entity", selector: { entity: {} } },
+            { name: "attribute", selector: { text: {} } },
+          ]
+          : [{ name: "content", selector: { text: { multiline: true } } }]),
+        { name: "title", selector: { text: {} } },
+      ],
+    },
+    {
+      name: "layout",
+      type: "expandable",
+      flatten: true,
+      title: "Layout",
+      icon: "mdi:move-resize",
+      schema: [{ type: "grid", name: "", schema: posXYWH(d) }],
+    },
+    {
+      name: "appearance",
+      type: "expandable",
+      flatten: true,
+      title: "Appearance",
+      icon: "mdi:palette",
+      schema: [{
+        name: "error_correction",
+        default: "M",
+        selector: {
+          select: { options: ["L", "M", "Q", "H"], mode: "dropdown" },
+        },
+      }],
+    },
+  ],
   frame: (d) => [
     identitySection(),
     {
@@ -1777,6 +1844,11 @@ export const SCHEMAS: Record<
 };
 
 export const HELPERS: Record<string, string> = {
+  content:
+    "Exact QR payload: a URL, text or a ready-made WIFI: string. "
+    + "Use a larger widget for longer content. Templates are not evaluated.",
+  error_correction:
+    "M is the default. Higher correction levels may need a larger widget.",
   badges:
     "Badges automatically show each entity's current Home Assistant "
     + "icon and value. Configure entity icons in Home Assistant.",
@@ -1798,6 +1870,9 @@ export const HELPERS: Record<string, string> = {
 };
 
 export const LABELS: Record<string, string> = {
+  source: "Content source",
+  content: "QR content",
+  error_correction: "Error correction",
   label: "Label",
   description: "Description",
   entity: "Entity",
@@ -1933,6 +2008,11 @@ export async function loadHaComponents(): Promise<void> {
 
 export function getSummary(widget: Widget): string {
   const t = widget.type;
+  if (t === "qr_code") {
+    if (widget.title) return widget.title;
+    return widget.source === "entity"
+      ? (widget.entity || "(no entity)") : "QR Code";
+  }
   if (t === "frame") {
     return `Frame at (${widget.x ?? 0}, ${widget.y ?? 0})`;
   }
@@ -2559,7 +2639,7 @@ class EinkDashboardEditor extends HTMLElement {
       document.createElement("ha-form") as unknown as HaFormElement;
     form.hass = this._hass;
     form.data = formData;
-    form.schema = schemaFn(this._display);
+    form.schema = schemaFn(this._display, widget);
     form.computeLabel = (s) => LABELS[s.name] || s.name;
     form.computeHelper = (s) => HELPERS[s.name] || "";
     form.addEventListener(
@@ -2583,6 +2663,15 @@ class EinkDashboardEditor extends HTMLElement {
         }
         const cur = this._widgets[index] as
           unknown as Record<string, unknown>;
+        if (widget.type === "qr_code") {
+          // Switching source hides fields; retain their values so the
+          // user can switch back without losing the previous payload.
+          for (const field of ["content", "entity", "attribute"]) {
+            if (!(field in data) && field in cur) {
+              data[field] = cur[field];
+            }
+          }
+        }
         // Preserve entries — ha-form doesn't know about
         // them so they'd be dropped by the spread.
         if (widget.type === "waste_schedule") {
@@ -2609,6 +2698,10 @@ class EinkDashboardEditor extends HTMLElement {
           data.invert_condition = cur.invert_condition;
         }
         this._widgets[index] = data as unknown as Widget;
+        if (widget.type === "qr_code" && data.source !== cur.source) {
+          form.schema = schemaFn(this._display, this._widgets[index]);
+          form.data = { ...data };
+        }
         this._fireWidgetChange();
         this._updateSummary(index);
         // Refresh entries pick-list when entity changes

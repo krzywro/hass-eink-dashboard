@@ -175,6 +175,7 @@ The component ships a WYSIWYG Lovelace card for editing the dashboard layout.
 | Weather | Current conditions + N-day forecast with icons |
 | [Meteogram](docs/meteogram.md) | Hourly forecast with temperature and wind |
 | Calendar | Upcoming events from a Home Assistant calendar entity |
+| [QR Code](docs/qr_code.md) | Scannable text, URL or raw entity value |
 | Device Battery | Battery level indicator for a device |
 | Frame | Decorative rounded-corner box for visual grouping |
 | [Waste Schedule](docs/waste_schedule.md) | Upcoming waste collection dates (today, tomorrow, in N days) |

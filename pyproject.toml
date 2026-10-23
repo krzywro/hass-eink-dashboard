@@ -10,6 +10,7 @@ dependencies = [
     "epaper-dithering>=5.0.7",
     "Pillow>=12.3",
     "resvg-py>=0.3.2",
+    "segno>=1.6.6",
 ]
 
 [dependency-groups]
@@ -21,6 +22,7 @@ test = [
     "defusedxml>=0.7.1",
     "Pillow>=12.3.0",
     "Jinja2>=3.1",
+    "zxing-cpp>=2.3",
     # pytest, pytest-asyncio, voluptuous, aiohttp pulled in by phacc
 ]
 interrogate = ["interrogate"]

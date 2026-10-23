@@ -364,3 +364,5 @@ class WidgetType(StrEnum):
     WASTE_SCHEDULE = "waste_schedule"
     CALENDAR = "calendar"
     METEOGRAM = "meteogram"
+    # Standard QR symbol generated locally from text or entity data.
+    QR_CODE = "qr_code"

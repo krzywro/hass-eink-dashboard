@@ -390,6 +390,24 @@ interface WidgetBase {
   visibility?: (Condition | LegacyCondition)[];
 }
 
+/** Standard QR code rendered from literal text or an entity value. */
+export interface QrCodeWidget extends WidgetBase {
+  /** Selects the server's QR renderer. */
+  type: "qr_code";
+  /** Payload source: literal text (default) or a Home Assistant entity. */
+  source?: "text" | "entity";
+  /** Exact payload in text mode, including whitespace and Unicode. */
+  content?: string;
+  /** Entity ID used in entity mode; accepts any domain. */
+  entity?: string;
+  /** Attribute to encode; empty or absent encodes the raw entity state. */
+  attribute?: string;
+  /** Optional visible title above the code, separate from editor label. */
+  title?: string;
+  /** QR correction level; default M. Higher levels may need more space. */
+  error_correction?: "L" | "M" | "Q" | "H";
+}
+
 /** Decorative rounded-corner border box. */
 export interface FrameWidget extends WidgetBase {
   type: "frame";
@@ -1346,6 +1364,7 @@ export interface MeteogramWidget extends WidgetBase {
 }
 
 export type Widget =
+  | QrCodeWidget
   | FrameWidget
   | SeparatorWidget
   | WeatherWidget

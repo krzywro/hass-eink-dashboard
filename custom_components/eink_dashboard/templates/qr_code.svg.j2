@@ -1,0 +1,17 @@
+{%- from "_macros.svg.j2" import widget_title -%}
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="{{ w }}" height="{{ h }}">
+<rect width="{{ w }}" height="{{ h }}" fill="{{ hex_white }}"/>
+{{ widget_title(title, title_font, hex_black) }}
+{%- if path -%}
+<path d="{{ path }}" fill="{{ hex_black }}"
+      shape-rendering="crispEdges"/>
+{%- else -%}
+<desc>{{ error }}</desc>
+{%- for line in error_lines -%}
+<text x="{{ text_x }}" y="{{ line.y }}" text-anchor="middle"
+      dominant-baseline="central" font-family="Roboto"
+      font-size="{{ font }}" fill="{{ hex_black }}">{{ line.text }}</text>
+{%- endfor -%}
+{%- endif -%}
+</svg>

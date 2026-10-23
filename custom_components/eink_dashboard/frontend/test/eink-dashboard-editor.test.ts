@@ -61,6 +61,7 @@ function findField(
 
 describe("WIDGET_TYPES", () => {
   const ALL_TYPES = [
+    "qr_code",
     "frame",
     "heading",
     "separator",
@@ -77,7 +78,7 @@ describe("WIDGET_TYPES", () => {
     "meteogram",
   ];
 
-  it("has all 14 widget types", () => {
+  it("has all 15 widget types", () => {
     expect(Object.keys(WIDGET_TYPES).sort()).toEqual(
       ALL_TYPES.sort()
     );
@@ -127,8 +128,54 @@ describe("WIDGET_TYPES", () => {
 
 // ── SCHEMAS ──────────────────────────────────────────────────────
 
+describe("QR Code configuration", () => {
+  it("starts with a square viewport and literal text source", () => {
+    // Picker defaults match the server's size and correction level.
+    expect(WIDGET_TYPES.qr_code.defaults).toMatchObject({
+      type: "qr_code", source: "text", content: "",
+      w: 200, h: 200, error_correction: "M",
+    });
+  });
+
+  it("shows multiline text without entity controls in text mode", () => {
+    // The content group exposes only the selected source's controls.
+    const schema = SCHEMAS.qr_code(DISPLAY);
+    const group = schema.find((field) => field.name === "content")!;
+    expect(findField(group.schema!, "content")?.selector).toEqual({
+      text: { multiline: true },
+    });
+    expect(findField(schema, "entity")).toBeUndefined();
+    expect(findField(schema, "attribute")).toBeUndefined();
+  });
+
+  it("shows any entity and an optional attribute in entity mode", () => {
+    // Any HA domain can provide a QR value; no literal control is shown.
+    const schema = SCHEMAS.qr_code(DISPLAY, {
+      type: "qr_code", source: "entity",
+    });
+    const group = schema.find((field) => field.name === "content")!;
+    expect(findField(schema, "entity")?.selector).toEqual({ entity: {} });
+    expect(findField(schema, "attribute")?.selector).toEqual({ text: {} });
+    expect(findField(group.schema!, "content")).toBeUndefined();
+  });
+
+  it("does not expose payloads in the collapsed summary", () => {
+    // Wi-Fi strings can contain passwords; summarize by title or source.
+    expect(getSummary({
+      type: "qr_code", content: "WIFI:T:WPA;S:Guest;P:secret;;",
+    })).toBe("QR Code");
+    expect(getSummary({
+      type: "qr_code", source: "entity", entity: "sensor.qr",
+    })).toBe("sensor.qr");
+    expect(getSummary({
+      type: "qr_code", title: "Guest Wi-Fi", content: "secret",
+    })).toBe("Guest Wi-Fi");
+  });
+});
+
 describe("SCHEMAS", () => {
   const ALL_TYPES = [
+    "qr_code",
     "frame",
     "heading",
     "separator",
@@ -145,7 +192,7 @@ describe("SCHEMAS", () => {
     "meteogram",
   ];
 
-  it("has a schema builder for all 14 widget types", () => {
+  it("has a schema builder for all 15 widget types", () => {
     expect(Object.keys(SCHEMAS).sort()).toEqual(ALL_TYPES.sort());
   });
 
@@ -771,6 +818,47 @@ async function mountEditor(
   await new Promise((r) => setTimeout(r, 0));
   return editor;
 }
+
+describe("QR Code source switching", () => {
+  it("updates controls and preserves inactive payloads and visibility",
+    async () => {
+      // ha-form may omit hidden fields when switching either direction.
+      const visibility = [{
+        condition: "state" as const, entity: "input_boolean.guests",
+        state: "on",
+      }];
+      const editor = await mountEditor([{
+        type: "qr_code", source: "text", content: "Guest payload",
+        entity: "sensor.qr", attribute: "url", visibility,
+      }]);
+      await expandWidget(editor, 0);
+      const form = editor.shadowRoot!.querySelector<HaFormElement>(
+        '.widget-item[data-index="0"] ha-form',
+      )!;
+      let received: Widget[] | undefined;
+      editor.addEventListener("widget-change",
+        ((ev: CustomEvent<{ widgets: Widget[] }>) => {
+          received = ev.detail.widgets;
+        }) as EventListener);
+      form.dispatchEvent(new CustomEvent("value-changed", {
+        detail: { value: { source: "entity" } },
+      }));
+      expect(findField(form.schema, "entity")).toBeDefined();
+      expect(received?.[0]).toMatchObject({
+        source: "entity", content: "Guest payload", entity: "sensor.qr",
+        attribute: "url", visibility,
+      });
+      form.dispatchEvent(new CustomEvent("value-changed", {
+        detail: { value: { source: "text" } },
+      }));
+      expect(findField(form.schema, "entity")).toBeUndefined();
+      expect(form.data.content).toBe("Guest payload");
+      expect(received?.[0]).toMatchObject({
+        source: "text", content: "Guest payload", entity: "sensor.qr",
+        attribute: "url", visibility,
+      });
+    });
+});
 
 describe("Weather sun-time switch", () => {
   it.each([true, false])(

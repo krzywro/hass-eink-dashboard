@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import resvg_py
+import zxingcpp
 from homeassistant.components import websocket_api
 from homeassistant.components.frontend import (
     DATA_EXTRA_MODULE_URL,
@@ -29,6 +31,7 @@ from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.eink_dashboard.const import DOMAIN
+from tests.helpers import png_to_image
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -155,6 +158,52 @@ async def _send_render_widgets(
 
 
 class TestWsRenderWidget:
+    @pytest.mark.parametrize("batch", [False, True])
+    async def test_qr_entity_preview_and_local_errors(
+        self,
+        hass: HomeAssistant,
+        hass_ws_client: WebSocketGenerator,
+        batch: bool,
+    ) -> None:
+        # Real HA state reaches the preview; a broken QR stays local.
+        hass.states.async_set(
+            "sensor.qr",
+            "8.41",
+            {
+                "url": "https://example.org/guest",
+                "unit_of_measurement": "°C",
+            },
+        )
+        widgets = [
+            {
+                "type": "qr_code",
+                "source": "entity",
+                "entity": "sensor.qr",
+                "attribute": "url",
+            },
+            {"type": "qr_code", "content": ""},
+        ]
+        client, entry = await _setup_entry(
+            hass,
+            hass_ws_client,
+            widgets=widgets,
+        )
+        if batch:
+            result = await _send_render_widgets(client, entry.entry_id)
+            assert result["success"]
+            svgs = result["result"]["svgs"]
+            assert len(svgs) == 2
+            assert "No QR content" in svgs[1]
+            svg = svgs[0]
+        else:
+            result = await _send_render_widget(client, entry.entry_id, 0)
+            assert result["success"]
+            svg = result["result"]["svg"]
+        png = resvg_py.svg_to_bytes(svg_string=svg)
+        decoded = zxingcpp.read_barcode(png_to_image(png).convert("L"))
+        assert decoded is not None
+        assert decoded.text == "https://example.org/guest"
+
     async def test_unsaved_heading_resolves_current_system_icon(
         self, hass: HomeAssistant, hass_ws_client: WebSocketGenerator
     ) -> None:
@@ -178,6 +227,7 @@ class TestWsRenderWidget:
         assert config["states"]["binary_sensor.example"]["entity_icon"] == (
             "mdi:door-open"
         )
+
     @pytest.mark.parametrize("batch", [False, True])
     @pytest.mark.parametrize(
         ("language", "expected"),
