@@ -100,6 +100,7 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       x: 24,
       y: 0,
       forecast_days: 5,
+      show_sun_times: false,
       font_size: FONT_SIZE_WEATHER,
       card_style: DEFAULT_CARD_STYLE,
       mode: DEFAULT_WEATHER_MODE,
@@ -827,6 +828,11 @@ export const SCHEMAS: Record<
         {
           name: "humidity_entity",
           selector: { entity: { domain: "sensor" } },
+        },
+        {
+          name: "show_sun_times",
+          default: false,
+          selector: { boolean: {} },
         },
         weatherModeSelector(),
       ],
@@ -1771,6 +1777,8 @@ export const SCHEMAS: Record<
 };
 
 export const HELPERS: Record<string, string> = {
+  show_sun_times:
+    "Shows the next sunrise and sunset in your Home Assistant time zone.",
   show_wind:
     "Arrowheads point in the direction the wind travels. "
     + "Speed uses the weather entity's unit; calm wind has no arrow.",
@@ -1820,6 +1828,8 @@ export const LABELS: Record<string, string> = {
   show_all: "Show all upcoming dates",
   entries: "Entries",
   forecast_days: "Forecast days",
+  show_sun_times:
+    "Show sunrise and sunset instead of min/max and precipitation",
   temperature_entity: "Temperature sensor",
   humidity_entity: "Humidity sensor",
   mode: "Mode",

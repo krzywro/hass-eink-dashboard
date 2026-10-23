@@ -18,7 +18,7 @@
     radius=m_radius, border=m_border,
     bar_width=bar_width,
     border_color=hex_black, bar_color=hex_gray) -%}
-{# Row 1: condition icon, temperature, today hi/lo/precip. #}
+{# Row 1: condition icon, temperature, forecast values or sun times. #}
 {%- if show_current -%}
 {%- if icon_svg -%}
 <g transform="translate({{ icon_x }}, {{ icon_y }})">{{ icon_svg }}</g>
@@ -30,6 +30,24 @@
   font-weight="bold"
   dominant-baseline="central"
   fill="{{ hex_black }}">{{ temp_text }}</text>
+{%- if sun_items -%}
+<g class="sun-times">
+{%- for event in sun_items -%}
+{%- if event.icon_svg -%}
+<g transform="translate({{ event.icon_x }}, {{ event.icon_y }})">
+{{ event.icon_svg }}
+</g>
+{%- endif -%}
+<text
+  x="{{ event.text_x }}" y="{{ event.text_y }}"
+  font-family="Roboto"
+  font-size="{{ sun_font_size }}"
+  text-anchor="start"
+  dominant-baseline="central"
+  fill="{{ hex_black }}">{{ event.text }}</text>
+{%- endfor -%}
+</g>
+{%- endif -%}
 {%- if hi_text -%}
 <text
   x="{{ hilo_right }}" y="{{ hi_y }}"

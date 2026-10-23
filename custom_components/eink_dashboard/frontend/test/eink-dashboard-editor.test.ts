@@ -15,6 +15,7 @@
 import { describe, it, expect } from "vitest";
 import type {
   HaFormSchema,
+  HaFormElement,
   EinkEditorElement,
   EinkWidgetPicker,
   Widget,
@@ -24,6 +25,7 @@ import {
   WIDGET_TYPES,
   SCHEMAS,
   LABELS,
+  HELPERS,
   loadHaComponents,
   getSummary,
 } from "../src/eink-dashboard-editor.js";
@@ -192,6 +194,19 @@ describe("SCHEMAS", () => {
     const schema = SCHEMAS.weather(DISPLAY);
     const field = findField(schema, "humidity_entity");
     expect(field?.selector?.entity).toMatchObject({ domain: "sensor" });
+  });
+
+  it("weather sun-time switch belongs to Content and defaults off", () => {
+    // Existing widgets and newly created widgets keep forecast values.
+    const content = SCHEMAS.weather(DISPLAY).find(
+      (field) => field.name === "content",
+    );
+    const field = findField(content!.schema!, "show_sun_times");
+    expect(field?.selector).toEqual({ boolean: {} });
+    expect(field?.default).toBe(false);
+    expect(WIDGET_TYPES.weather.defaults.show_sun_times).toBe(false);
+    expect(LABELS.show_sun_times).toContain("instead of");
+    expect(HELPERS.show_sun_times).toContain("next sunrise and sunset");
   });
 
   it("meteogram entity field uses domain filter 'weather'", () => {
@@ -748,6 +763,42 @@ async function mountEditor(
   await new Promise((r) => setTimeout(r, 0));
   return editor;
 }
+
+describe("Weather sun-time switch", () => {
+  it.each([true, false])(
+    "writes show_sun_times=%s through the widget form",
+    async (enabled) => {
+      // Toggling either way must reach the saved widget and retain content.
+      const widget: Widget = {
+        type: "weather",
+        entity: "weather.home",
+        mode: "current",
+        show_sun_times: !enabled,
+      };
+      const editor = await mountEditor([widget]);
+      await expandWidget(editor, 0);
+      const form = editor.shadowRoot!.querySelector<HaFormElement>(
+        '.widget-item[data-index="0"] ha-form',
+      )!;
+      let received: Widget[] | undefined;
+      editor.addEventListener(
+        "widget-change",
+        ((ev: CustomEvent<{ widgets: Widget[] }>) => {
+          received = ev.detail.widgets;
+        }) as EventListener,
+      );
+      form.dispatchEvent(new CustomEvent("value-changed", {
+        detail: { value: { ...form.data, show_sun_times: enabled } },
+      }));
+      expect(received?.[0]).toMatchObject({
+        type: "weather",
+        entity: "weather.home",
+        mode: "current",
+        show_sun_times: enabled,
+      });
+    },
+  );
+});
 
 describe("Invert condition panel", () => {
   it("appears for tile widgets", async () => {

@@ -429,6 +429,11 @@ export interface WeatherWidget extends WidgetBase {
   /** Number of forecast days to display (0–14). */
   forecast_days?: number;
   /**
+   * Replace the top-row min/max and precipitation column with the
+   * next sunrise and sunset from sun.sun. Default: false.
+   */
+  show_sun_times?: boolean;
+  /**
    * Optional sensor entity that overrides the weather entity's
    * temperature attribute. When set, the sensor's state is used
    * and always formatted to one decimal place (e.g. 22.0°C).

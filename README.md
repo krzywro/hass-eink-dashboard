@@ -184,6 +184,18 @@ to constrain rendering to a sub-region of the display. All widgets also
 support a `visibility` list of Lovelace conditions to show or hide the
 widget based on entity state or other conditions.
 
+The Weather widget's **Show sunrise and sunset instead of min/max and
+precipitation** switch (`show_sun_times: true`) replaces its top-right
+forecast column with two icons and event times. It defaults to off.
+Times come from `sun.sun`'s `next_rising` and `next_setting` attributes
+for the Home Assistant location, converted to its configured time zone
+and the display's clock format. Each value is the next occurrence, so
+after sunrise its time refers to the following sunrise, often tomorrow.
+Missing data displays `—`. The column appears alongside current
+conditions, including the fallback when a forecast-only widget has no
+forecast data. The separate min/max bar in Current only mode is
+unaffected.
+
 The Tile widget additionally supports `invert_condition` — a list of
 conditions in the same format as `visibility`. When met, the tile renders
 inverted (solid black card, white text/icon) as a "needs attention" signal

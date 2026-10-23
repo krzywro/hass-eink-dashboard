@@ -16,10 +16,15 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from contextlib import suppress
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from math import ceil
 from typing import Any
 
 import markupsafe
+from babel import UnknownLocaleError
+from babel.dates import format_time
 
 from ..const import (
     DEFAULT_CARD_STYLE,
@@ -33,6 +38,7 @@ from ..svg_render import (
     _ICONS_DIR,
     _build_inline_svg,
     _load_svg_paths,
+    _mdi_svg_filter,
     _weather_svg_filter,
 )
 from ._helpers import (
@@ -40,6 +46,7 @@ from ._helpers import (
     _color_context,
     _fmt,
     _metrics_context,
+    _resolve_tz,
     _temp_gradient_stops,
     _widget_dim,
 )
@@ -67,6 +74,7 @@ _WX_ICON_R_PAD = 16  # gap: condition icon → temp text
 _WX_DETAIL_GAP = 2  # vertical gap above detail row
 _WX_DETAIL_ICON_H = 20  # detail icon height
 _WX_ICON_GAP = 4  # gap: detail icon → its text
+_WX_SUN_ICON = 24  # sunrise/sunset icon size in each half-height row
 _WX_SEP_GAP = 8  # gap above/below separator line
 _WX_FC_ZONE_H = 88  # forecast zone height
 _WX_PRECIP_H = _WX_FONT_SM  # line height matches font
@@ -89,6 +97,191 @@ _DETAIL_ICON_MAP: dict[str, str] = {
     "wind": "wi-strong-wind",
     "cloud": "wi-cloud",
 }
+
+
+@dataclass(frozen=True)
+class _SunLayout:
+    """Fitted first-row geometry when the sun column is selected."""
+
+    icon_size: int  # Shared height of the weather icon and sun column.
+    icon_right_pad: int  # Gap between the weather icon and temperature.
+    temp_font_size: int  # Large temperature size after width fitting.
+    font_size: int  # Time label size after width fitting.
+    items: list[dict[str, object]]  # Icon and text positions for both rows.
+
+
+def _format_sun_time(value: Any, config: DisplayConfig) -> str:
+    """Format a sun event in the display's time zone and clock format.
+
+    Sun attributes describe the next occurrence, which may be tomorrow.
+    A timestamp without an offset is treated as UTC, matching Sun's
+    attribute contract. Missing or malformed values become a dash.
+
+    Args:
+        value: ISO 8601 timestamp or datetime from sun.sun attributes.
+        config: Display time zone, clock preference, and language.
+
+    Returns:
+        Local event time without seconds, or an em dash.
+    """
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            return "—"
+    if not isinstance(value, datetime):
+        return "—"
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    try:
+        local = value.astimezone(_resolve_tz(config))
+    except (ValueError, OverflowError):
+        return "—"
+
+    time_format = config.get("time_format", "language")
+    pattern = {"12": "h:mm a", "24": "HH:mm"}.get(time_format, "short")
+    language = config.get("language", "en").replace("-", "_")
+    # System/language preferences use the display locale, never the host's.
+    for locale in (language, language.split("_")[0], "en"):
+        with suppress(UnknownLocaleError, ValueError):
+            return format_time(local, format=pattern, locale=locale)
+    return "—"
+
+
+def _build_sun_layout(
+    config: DisplayConfig,
+    temp_text: str,
+    scale: float,
+    content_left: int,
+    content_w: int,
+    content_top: int,
+) -> _SunLayout:
+    """Fit the current-conditions row around a right-aligned sun column.
+
+    The weather icon and sun block share an exact height. If necessary,
+    the whole first row scales down together to preserve readable
+    proportions and keep long temperatures away from the time labels.
+
+    Args:
+        config: Display state snapshot and locale settings.
+        temp_text: Formatted temperature with its unit.
+        scale: Configured weather scale relative to the base geometry.
+        content_left: Left edge after card padding.
+        content_w: Available width after card padding.
+        content_top: Top edge of the weather icon and sun block.
+
+    Returns:
+        First-row sizes and the two positioned sun entries.
+    """
+    from ..render import _compute_metrics, _load_font
+
+    attrs = config.get("states", {}).get("sun.sun", {}).get("attributes", {})
+    times = tuple(
+        _format_sun_time(attrs.get(key), config)
+        for key in ("next_rising", "next_setting")
+    )
+    font = _load_font(max(1, round(_WX_FONT_SM * scale)))
+    temp_font = _load_font(max(1, round(_WX_FONT_XL * scale)), bold=True)
+    # Reserve two extra pixels for glyph bearings and raster rounding.
+    sun_width = (
+        (_WX_SUN_ICON + _WX_ICON_GAP) * scale
+        + max(font.getlength(t) for t in times)
+        + 2
+    )
+    required = (
+        (_WX_ICON + _WX_ICON_R_PAD) * scale
+        + temp_font.getlength(temp_text)
+        + _compute_metrics(round(_WX_ROW_H * scale)).padding
+        + sun_width
+    )
+    row_scale = scale * min(1.0, max(1, content_w) / required)
+    icon_size = max(1, round(_WX_ICON * row_scale))
+    icon_right_pad = max(1, round(_WX_ICON_R_PAD * row_scale))
+    font_size = max(1, round(_WX_FONT_SM * row_scale))
+    sun_icon_size = max(1, round(_WX_SUN_ICON * row_scale))
+    gap = max(1, round(_WX_ICON_GAP * row_scale))
+    font = _load_font(font_size)
+    sun_width = (
+        sun_icon_size + gap + ceil(max(font.getlength(t) for t in times)) + 2
+    )
+    left = content_left + content_w - sun_width
+    temp_font_size = max(1, round(_WX_FONT_XL * row_scale))
+    temp_font = _load_font(temp_font_size, bold=True)
+    budget = max(
+        1,
+        left
+        - content_left
+        - icon_size
+        - icon_right_pad
+        - max(1, round(_WX_ICON_R_PAD * row_scale)),
+    )
+    temp_font_size = max(
+        1,
+        min(
+            temp_font_size,
+            int(
+                temp_font_size
+                * budget
+                / max(1, temp_font.getlength(temp_text))
+            ),
+        ),
+    )
+    items: list[dict[str, object]] = []
+    for index, (text, name) in enumerate(
+        zip(times, ("weather-sunset-up", "weather-sunset-down"), strict=True)
+    ):
+        # Half-row centers keep the block the same height as the icon.
+        center_y = content_top + icon_size * (2 * index + 1) / 4
+        icon_svg = ""
+        with suppress(FileNotFoundError):
+            icon_svg = _mdi_svg_filter(name, sun_icon_size)
+        items.append(
+            {
+                "icon_svg": icon_svg,
+                "icon_x": left,
+                "icon_y": center_y - sun_icon_size / 2,
+                "text": text,
+                "text_x": left + sun_icon_size + gap,
+                "text_y": center_y,
+            }
+        )
+    return _SunLayout(
+        icon_size, icon_right_pad, temp_font_size, font_size, items
+    )
+
+
+def _today_labels(
+    forecast: list[dict[str, Any]],
+    precip_unit: str,
+    config: DisplayConfig,
+) -> tuple[str, str, str]:
+    """Format the existing top-row high, low, and precipitation labels.
+
+    Args:
+        forecast: Daily forecast entries, possibly empty.
+        precip_unit: Unit suffix for precipitation values.
+        config: Display language and number format.
+
+    Returns:
+        High, low, and precipitation labels; absent fields stay empty.
+    """
+    from ..render import _fmt_temp
+
+    today = forecast[0] if forecast else {}
+    nf = config.get("number_format", "language")
+    lang = config.get("language", "en")
+    hi, lo, precip = (
+        today.get("temperature"),
+        today.get("templow"),
+        today.get("precipitation"),
+    )
+    return (
+        f"{_fmt_temp(hi, nf, lang)}°" if hi is not None else "",
+        f"{_fmt_temp(lo, nf, lang)}°" if lo is not None else "",
+        f"{_fmt(str(precip), config)}{precip_unit}"
+        if precip is not None
+        else "",
+    )
 
 
 def _none_if_empty(value: Any) -> Any:
@@ -340,9 +533,10 @@ def _build_weather_context(
         widget: Widget config dict.  Recognised keys:
             ``entity``, ``x``, ``y``, ``w``, ``font_size``,
             ``forecast_days``, ``card_style``, ``mode``,
-            ``temperature_entity``, ``humidity_entity``.
+            ``temperature_entity``, ``humidity_entity``, ``show_sun_times``.
         config: Display config with ``width``, ``height``,
-            ``states``, ``display_levels``.
+            ``states``, ``display_levels``, ``time_zone``, ``time_format``,
+            and ``language``.
 
     Returns:
         Template context dict consumed by ``weather.svg.j2``.
@@ -471,6 +665,12 @@ def _build_weather_context(
     # Card metrics — 48 at scale=1 gives card-level metrics
     # (padding~10, radius~10) matching the original PIL layout.
     m = _compute_metrics(round(_WX_ROW_H * scale))
+    x_off, r_inset, bar_width = _card_insets(m, card_style, display_levels)
+    # Soft-pad sides without a card-provided inset, as in other widgets.
+    lpad = m.padding if x_off == 0 else 0
+    rpad = m.padding if r_inset == 0 else 0
+    content_left = x_off + lpad
+    content_w = card_w - content_left - r_inset - rpad
 
     # Sizing constants, all proportional to scale.
     icon_size = round(_WX_ICON * scale)
@@ -496,6 +696,14 @@ def _build_weather_context(
         temp_text = f"{format_number(f'{temp:.1f}', nf, lang)}{temp_unit}"
     else:
         temp_text = f"{_fmt_temp(temp, nf, lang)}{temp_unit}"
+    sun_layout = None
+    if show_current and widget.get("show_sun_times", False):
+        sun_layout = _build_sun_layout(
+            config, temp_text, scale, content_left, content_w, m.padding
+        )
+        icon_size = sun_layout.icon_size
+        icon_right_pad = sun_layout.icon_right_pad
+        font_xl = _load_font(sun_layout.temp_font_size, bold=True)
     temp_bbox = font_xl.getbbox(temp_text)
     temp_h = temp_bbox[3] - temp_bbox[1]
 
@@ -546,14 +754,6 @@ def _build_weather_context(
     # configured.
     svg_h = _widget_dim(widget, "h", total_h)
 
-    x_off, r_inset, bar_width = _card_insets(m, card_style, display_levels)
-    # Soft-pad when the card provides no inset on that side,
-    # consistent with tile/heading/entities/waste_schedule.
-    lpad = m.padding if x_off == 0 else 0
-    rpad = m.padding if r_inset == 0 else 0
-    content_left = x_off + lpad
-    content_w = card_w - content_left - r_inset - rpad
-
     content_top = top_pad
 
     # Row 1: condition icon + temperature + today hi/lo/precip.
@@ -571,35 +771,34 @@ def _build_weather_context(
     vis_top = icon_cy - temp_h // 2
     hilo_right = content_left + content_w - pad
 
-    today_hi = ""
-    today_lo = ""
-    today_precip = ""
+    today_hi, today_lo, today_precip = (
+        ("", "", "")
+        if sun_layout
+        else _today_labels(
+            forecast, attrs.get("precipitation_unit", "mm"), config
+        )
+    )
     lo_y = vis_top + round(temp_h * _WX_LO_Y_FRAC)
     precip_y = vis_top + round(temp_h * _WX_PRECIP_Y_FRAC)
     precip_unit_fc = attrs.get("precipitation_unit", "mm")
-    if forecast:
-        today = forecast[0]
-        hi_val = today.get("temperature")
-        lo_val = today.get("templow")
-        p_val = today.get("precipitation")
-        if hi_val is not None:
-            today_hi = f"{_fmt_temp(hi_val, nf, lang)}°"
-        if lo_val is not None:
-            today_lo = f"{_fmt_temp(lo_val, nf, lang)}°"
-        if p_val is not None:
-            today_precip = f"{_fmt(str(p_val), config)}{precip_unit_fc}"
 
     # Cap font_xl so temp text doesn't overlap the hi/lo column.
-    font_xl_size = _cap_weather_font_xl(
-        round(_WX_FONT_XL * scale),
-        font_xl,
-        font_sm,
-        _load_font(round(_WX_FONT_XS * scale)),
-        temp_text,
-        hilo_right - temp_x - pad,
-        today_hi,
-        today_lo,
-        today_precip,
+    font_xl_size = (
+        sun_layout.temp_font_size
+        if sun_layout
+        else (
+            _cap_weather_font_xl(
+                round(_WX_FONT_XL * scale),
+                font_xl,
+                font_sm,
+                _load_font(round(_WX_FONT_XS * scale)),
+                temp_text,
+                hilo_right - temp_x - pad,
+                today_hi,
+                today_lo,
+                today_precip,
+            )
+        )
     )
 
     # row1_bottom mirrors PIL's max() between icon bottom and
@@ -826,6 +1025,8 @@ def _build_weather_context(
         "temp_y": temp_y,
         "font_xl": font_xl_size,
         "font_sm": round(_WX_FONT_SM * scale),
+        "sun_items": sun_layout.items if sun_layout else [],
+        "sun_font_size": sun_layout.font_size if sun_layout else 0,
         # font_xs is template-only; no PIL measurement needed.
         "font_xs": round(_WX_FONT_XS * scale),
         "hilo_right": hilo_right,
