@@ -24,6 +24,7 @@ from custom_components.eink_dashboard.const import (
 )
 from custom_components.eink_dashboard.render import (
     _compute_metrics,
+    _load_font,
     render_dashboard,
 )
 from custom_components.eink_dashboard.svg_render import render_widget_svg
@@ -33,6 +34,7 @@ from tests.helpers import (
     assert_has_dark_pixels,
     assert_has_gray_pixels,
     assert_scales_proportionally,
+    assert_vertically_centered,
     content_bbox,
     make_config,
     pixel,
@@ -712,6 +714,266 @@ class TestRenderHeading:
         )
         assert without_badges != with_badges, (
             "adding a badge should change rendered output"
+        )
+
+    def test_badge_icon_visible_by_default(self) -> None:
+        # String and object badges both show the entity icon by default.
+        """Show the current entity icon for both badge config forms."""
+        base = {"type": "heading", "x": 0, "w": 400, "h": 56}
+        config = self._config(
+            states={
+                "sensor.example": {
+                    "state": "42",
+                    "attributes": {"icon": "mdi:home"},
+                }
+            }
+        )
+        hidden = render_dashboard(
+            [
+                {
+                    **base,
+                    "badges": [
+                        {
+                            "entity": "sensor.example",
+                            "show_icon": False,
+                        }
+                    ],
+                }
+            ],
+            config,
+        )
+        for badge in ["sensor.example", {"entity": "sensor.example"}]:
+            result = render_dashboard([{**base, "badges": [badge]}], config)
+            assert result != hidden
+
+    def test_badge_uses_system_icon_over_device_class(self) -> None:
+        # System icon selection must not be replaced by a local class map.
+        """Keep the entity's chosen icon when a device class exists."""
+        widget = {
+            "type": "heading",
+            "x": 0,
+            "w": 400,
+            "h": 56,
+            "badges": [{"entity": "sensor.example", "show_icon": True}],
+        }
+        attrs = {"icon": "mdi:home"}
+        plain = self._config(
+            states={
+                "sensor.example": {
+                    "state": "42",
+                    "attributes": attrs,
+                }
+            }
+        )
+        classified = self._config(
+            states={
+                "sensor.example": {
+                    "state": "42",
+                    "attributes": {**attrs, "device_class": "temperature"},
+                }
+            }
+        )
+        assert render_dashboard([widget], plain) == render_dashboard(
+            [widget], classified
+        )
+
+    def test_badge_override_cannot_replace_system_icon(self) -> None:
+        # Legacy per-badge overrides cannot diverge from the HA icon.
+        """Use HA entity settings instead of a stale widget override."""
+        base = {"type": "heading", "x": 0, "w": 400, "h": 56}
+        badge = {"entity": "sensor.example", "show_icon": True}
+        config = self._config(
+            states={
+                "sensor.example": {
+                    "state": "42",
+                    "attributes": {"icon": "mdi:home"},
+                }
+            }
+        )
+        assert render_dashboard(
+            [{**base, "badges": [badge]}], config
+        ) == render_dashboard(
+            [{**base, "badges": [{**badge, "icon": "mdi:thermometer"}]}],
+            config,
+        )
+
+    def test_badge_resolved_icon_changes_with_snapshot(self) -> None:
+        # Each new snapshot supplies the current system-resolved icon.
+        """Render the new icon when the system's selection changes."""
+        widget = {
+            "type": "heading",
+            "x": 0,
+            "w": 400,
+            "h": 56,
+            "badges": ["binary_sensor.example"],
+        }
+        images = []
+        for icon in ["mdi:door-closed", "mdi:door-open"]:
+            config = self._config(
+                states={
+                    "binary_sensor.example": {
+                        "state": "on",
+                        "attributes": {},
+                        "entity_icon": icon,
+                    }
+                }
+            )
+            images.append(render_dashboard([widget], config))
+        assert images[0] != images[1]
+
+    def test_badge_icon_centered_and_scales(self) -> None:
+        # Badge icons share the text centre and scale with row height.
+        """Keep icon alignment and scale proportional to row height."""
+        config = self._config(
+            states={
+                "sensor.example": {
+                    "state": "42",
+                    "attributes": {"icon": "mdi:home"},
+                }
+            }
+        )
+        bounds = []
+        for height in [56, 112]:
+            m = _compute_metrics(height)
+            font = _load_font(m.font_secondary)
+            text_w = round(font.getlength("42"))
+            text_x = 400 - m.padding - text_w
+            icon_gap = max(1, round(font.getlength(" ")))
+            icon_x = text_x - icon_gap - m.font_secondary
+            image = render_to_image(
+                [
+                    {
+                        "type": "heading",
+                        "x": 0,
+                        "w": 400,
+                        "h": height,
+                        "badges": ["sensor.example"],
+                    }
+                ],
+                config,
+            )
+            region = (icon_x, 0, icon_x + m.font_secondary, height)
+            assert_vertically_centered(
+                image,
+                region,
+                (text_x, 0, 400 - m.padding, height),
+                tolerance=3,
+            )
+            bounds.append(content_bbox(image, *region))
+        assert bounds[0] is not None and bounds[1] is not None
+        assert (
+            abs(
+                (bounds[1][3] - bounds[1][1]) / (bounds[0][3] - bounds[0][1])
+                - 2
+            )
+            < 0.3
+        )
+
+    def test_badge_does_not_overlap_heading(self) -> None:
+        # Icon widths must be included before checking heading clearance.
+        """Omit badges that would draw over the heading text."""
+        config = self._config(
+            states={
+                "sensor.example": {
+                    "state": "42",
+                    "attributes": {"icon": "mdi:home"},
+                }
+            }
+        )
+        for alignment in ["left", "right"]:
+            base = {
+                "type": "heading",
+                "x": 0,
+                "w": 220,
+                "h": 56,
+                "heading": "A fairly long heading",
+                "heading_align": alignment,
+            }
+            assert render_dashboard([base], config) == render_dashboard(
+                [{**base, "badges": ["sensor.example"]}], config
+            )
+
+    def test_badge_unrenderable_icon_keeps_value_and_spacing(self) -> None:
+        # An unsupported or missing glyph must not leave a reserved gap.
+        """Keep values visible without substituting a different icon."""
+        base = {
+            "type": "heading",
+            "x": 0,
+            "w": 400,
+            "h": 56,
+            "badges": ["sensor.example", "sensor.other"],
+        }
+        for icon in ["custom:example", "mdi:does-not-exist-xyz"]:
+            config = self._config(
+                states={
+                    "sensor.example": {
+                        "state": "42",
+                        "attributes": {"icon": icon},
+                    },
+                    "sensor.other": {"state": "12", "attributes": {}},
+                }
+            )
+            assert render_dashboard([base], config) == render_dashboard(
+                [
+                    {
+                        **base,
+                        "badges": [
+                            {"entity": "sensor.example", "show_icon": False},
+                            "sensor.other",
+                        ],
+                    }
+                ],
+                config,
+            )
+
+    def test_icon_only_badge_has_no_trailing_text_gap(self) -> None:
+        # An icon-only badge reaches the right inset without a text gap.
+        """Avoid reserving text spacing when state display is disabled."""
+        m = _compute_metrics(56)
+        config = self._config(
+            states={
+                "sensor.example": {
+                    "state": "42",
+                    "attributes": {"icon": "mdi:home"},
+                }
+            }
+        )
+        image = render_to_image(
+            [
+                {
+                    "type": "heading",
+                    "x": 0,
+                    "w": 400,
+                    "h": 56,
+                    "badges": [
+                        {"entity": "sensor.example", "show_state": False}
+                    ],
+                }
+            ],
+            config,
+        )
+        bounds = content_bbox(image, 300, 0, 400, 56)
+        assert bounds is not None
+        assert bounds[2] >= 400 - m.padding - 3
+
+    def test_empty_badge_leaves_no_gap(self) -> None:
+        # Suppressing both components must not shift neighbouring badges.
+        """Skip badges with neither an icon nor a value."""
+        base = {
+            "type": "heading",
+            "x": 0,
+            "w": 400,
+            "h": 56,
+            "badges": ["sensor.temperature"],
+        }
+        empty = {
+            "entity": "sensor.humidity",
+            "show_icon": False,
+            "show_state": False,
+        }
+        assert render_dashboard([base], self._config()) == render_dashboard(
+            [{**base, "badges": ["sensor.temperature", empty]}],
+            self._config(),
         )
 
     def test_heading_no_badges_no_crash(self) -> None:

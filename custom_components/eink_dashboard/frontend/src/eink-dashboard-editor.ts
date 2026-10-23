@@ -1777,6 +1777,9 @@ export const SCHEMAS: Record<
 };
 
 export const HELPERS: Record<string, string> = {
+  badges:
+    "Badges automatically show each entity's current Home Assistant "
+    + "icon and value. Configure entity icons in Home Assistant.",
   show_sun_times:
     "Shows the next sunrise and sunset in your Home Assistant time zone.",
   show_wind:

@@ -67,6 +67,7 @@ from .const import (
     WidgetType,
     default_list_row_height,
 )
+from .entity_icons import async_enrich_heading_icons
 from .push import async_push_image
 from .render import render_dashboard
 
@@ -239,6 +240,9 @@ class EinkDashboardImage(ImageEntity):
         try:
             async with self._refresh_lock:
                 states = self._build_states()
+                await async_enrich_heading_icons(
+                    self.hass, self._widgets, states
+                )
                 await self._async_enrich_entity_icons(states)
                 await self._async_enrich_display_precision(states)
                 await self._async_fetch_forecasts(states)

@@ -184,6 +184,16 @@ to constrain rendering to a sub-region of the display. All widgets also
 support a `visibility` list of Lovelace conditions to show or hide the
 widget based on entity state or other conditions.
 
+Heading entity badges automatically show the current Home Assistant icon
+before each value. Icon selection respects entity settings, integration
+definitions, and state-dependent domain defaults from the installed HA
+version. Configure an entity's icon in Home Assistant; legacy per-badge
+`icon` overrides are ignored. Existing badge lists need no migration.
+Explicit `show_icon: false` hides an icon; `show_state: false` shows only
+the icon. Badges that do not fit beside the heading are omitted.
+The SVG renderer supports MDI icons. Missing glyphs and custom frontend
+icon sets keep the value visible without substituting a different icon.
+
 The Weather widget's **Show sunrise and sunset instead of min/max and
 precipitation** switch (`show_sun_times: true`) replaces its top-right
 forecast column with two icons and event times. It defaults to off.

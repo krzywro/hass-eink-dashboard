@@ -525,6 +525,14 @@ describe("SCHEMAS form grouping", () => {
     expect(fields).toContain("heading");
   });
 
+  it("heading badges use entity selection with automatic system icons", () => {
+    // Badge icons come from HA; selecting entities needs no icon overrides.
+    const field = findField(SCHEMAS.heading(DISPLAY), "badges");
+    expect(field?.selector).toEqual({ entity: { multiple: true } });
+    expect(HELPERS.badges).toContain("current Home Assistant");
+    expect(HELPERS.badges).toContain("Configure entity icons");
+  });
+
   it("heading layout section contains x, y, w", () => {
     // Layout is the position group: x, y, and optional width override.
     const schema = SCHEMAS.heading(DISPLAY);

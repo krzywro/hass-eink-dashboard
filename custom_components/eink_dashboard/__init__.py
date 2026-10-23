@@ -57,6 +57,7 @@ from .const import (
     default_list_row_height,
     resolve_display,
 )
+from .entity_icons import async_enrich_heading_icons
 from .http import EinkLayoutView, EinkPublicImageView
 from .store import EinkDashboardStore
 from .svg_render import render_widget_svg
@@ -239,7 +240,9 @@ def _ha_time_zone(hass: HomeAssistant) -> str:
 
 
 async def _build_display_config(
-    hass: HomeAssistant, entry_id: str
+    hass: HomeAssistant,
+    entry_id: str,
+    widgets: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build a DisplayConfig for rendering a widget preview.
 
@@ -251,6 +254,8 @@ async def _build_display_config(
     Args:
         hass: Home Assistant instance.
         entry_id: Config entry ID present in ``hass.data[DOMAIN]``.
+        widgets: Widgets being previewed, including unsaved edits. When
+            omitted, use the entry's stored widgets.
 
     Returns:
         Dict with ``width``, ``height``, ``row_height``,
@@ -274,6 +279,11 @@ async def _build_display_config(
             # mutates existing nested values.
             "attributes": dict(state.attributes),
         }
+    await async_enrich_heading_icons(
+        hass,
+        widgets if widgets is not None else entry_data.get("widgets", []),
+        states,
+    )
     await _enrich_entity_icons(hass, states)
     await _enrich_display_precision(hass, states)
     (
@@ -747,7 +757,7 @@ async def ws_render_widget(
             )
             return
         widget = widgets[idx]
-    config = await _build_display_config(hass, entry_id)
+    config = await _build_display_config(hass, entry_id, [widget])
     await _fetch_forecasts(hass, [widget], config["states"])
     await _fetch_history(hass, [widget], config["states"])
     await _fetch_calendar_events(hass, [widget], config["states"])
@@ -813,7 +823,7 @@ async def ws_render_widgets(
         return
 
     widgets = msg.get("widgets") or list(entry_data["widgets"])
-    config = await _build_display_config(hass, entry_id)
+    config = await _build_display_config(hass, entry_id, widgets)
     await _fetch_forecasts(hass, widgets, config["states"])
     await _fetch_history(hass, widgets, config["states"])
     await _fetch_calendar_events(hass, widgets, config["states"])

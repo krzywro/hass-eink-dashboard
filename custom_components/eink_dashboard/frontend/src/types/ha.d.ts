@@ -603,7 +603,9 @@ export interface TileWidget extends WidgetBase {
  * A single entity badge displayed to the right of the heading text.
  *
  * Accepts either a plain entity ID string (shorthand for
- * ``{ entity: "...", show_icon: false }``) or a full config object.
+ * ``{ entity: "...", show_icon: true }``) or a full config object.
+ * Icons follow the entity's current Home Assistant configuration and
+ * state, including user customisations and integration icon resources.
  * When the entity is missing from HA states, the badge is silently
  * omitted at render time.
  */
@@ -612,7 +614,10 @@ export interface HeadingBadge {
   entity: string;
   /** Override label; unused in current renderer but reserved. */
   name?: string;
-  /** MDI icon name override for the badge (e.g. "mdi:thermometer"). */
+  /**
+   * Legacy icon override; ignored by the renderer.
+   * @deprecated Configure the entity icon in Home Assistant instead.
+   */
   icon?: string;
   /**
    * When true, the entity state value is shown next to the badge icon.
@@ -620,8 +625,8 @@ export interface HeadingBadge {
    */
   show_state?: boolean;
   /**
-   * When true, an icon is rendered alongside the badge text.
-   * Default: false.
+   * When true, the current HA entity icon appears beside the value.
+   * Default: true. Set false to explicitly hide the icon.
    */
   show_icon?: boolean;
 }
@@ -660,7 +665,7 @@ export interface HeadingWidget extends WidgetBase {
   icon?: string;
   /**
    * List of entity IDs or badge config objects.  Each resolves to a
-   * small text chip displayed to the right of the heading.
+   * current entity icon and optional value to the right of the heading.
    */
   badges?: (string | HeadingBadge)[];
   /**

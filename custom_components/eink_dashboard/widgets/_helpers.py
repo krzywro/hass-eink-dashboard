@@ -472,7 +472,7 @@ def _resolve_icon_svg(
        is empty.
 
     Callers that only want to honour ``mdi:``-prefixed overrides
-    (e.g. heading badges) must normalise non-``mdi:`` values to
+    must normalise non-``mdi:`` values to
     ``None`` before calling, so the chain falls through to
     device_class resolution instead of stopping at step 1.
 

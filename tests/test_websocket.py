@@ -155,6 +155,30 @@ async def _send_render_widgets(
 
 
 class TestWsRenderWidget:
+    async def test_unsaved_heading_resolves_current_system_icon(
+        self, hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+    ) -> None:
+        # A preview override may reference badges absent from saved widgets.
+        """Resolve icons for the actual single-widget preview request."""
+        client, entry = await _setup_entry(hass, hass_ws_client)
+        hass.states.async_set(
+            "binary_sensor.example",
+            "on",
+            {
+                "device_class": "door",
+            },
+        )
+        widget = {"type": "heading", "badges": ["binary_sensor.example"]}
+        with patch(_RENDER_SVG_TARGET, return_value="<svg/>") as render:
+            result = await _send_render_widget(
+                client, entry.entry_id, 0, widget=widget
+            )
+        assert result["success"]
+        config = render.call_args.args[1]
+        assert config["states"]["binary_sensor.example"]["entity_icon"] == (
+            "mdi:door-open"
+        )
+
     async def test_returns_svg_for_valid_widget(
         self, hass: HomeAssistant, hass_ws_client: WebSocketGenerator
     ) -> None:
@@ -528,6 +552,30 @@ class TestWsRenderWidget:
 
 
 class TestWsRenderWidgets:
+    async def test_unsaved_heading_batch_resolves_system_icon(
+        self, hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+    ) -> None:
+        # Batch previews must resolve icons using unsaved badge selections.
+        """Keep batch preview icon resolution consistent with PNGs."""
+        client, entry = await _setup_entry(hass, hass_ws_client)
+        hass.states.async_set(
+            "sensor.example",
+            "57",
+            {
+                "device_class": "battery",
+            },
+        )
+        widgets = [{"type": "heading", "badges": ["sensor.example"]}]
+        with patch(_RENDER_SVG_TARGET, return_value="<svg/>") as render:
+            result = await _send_render_widgets(
+                client, entry.entry_id, widgets=widgets
+            )
+        assert result["success"]
+        config = render.call_args.args[1]
+        assert config["states"]["sensor.example"]["entity_icon"] == (
+            "mdi:battery-50"
+        )
+
     async def test_returns_all_svgs(
         self, hass: HomeAssistant, hass_ws_client: WebSocketGenerator
     ) -> None:

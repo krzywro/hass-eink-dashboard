@@ -161,6 +161,42 @@ class TestEinkDashboardImage:
 
         mock_enrich.assert_called_once()
 
+    async def test_heading_png_tracks_system_icon_changes(
+        self, make_entity: Callable[..., Any], hass: HomeAssistant
+    ) -> None:
+        # The saved PNG must resolve new registry icons on every refresh.
+        """Use current HA entity settings in the scheduled image path."""
+        entry = er.async_get(hass).async_get_or_create(
+            "sensor", "test", "heading", suggested_object_id="example"
+        )
+        hass.states.async_set(
+            entry.entity_id,
+            "42",
+            {
+                "device_class": "temperature",
+            },
+        )
+        entity, _entry = make_entity()
+        entity.set_widgets(
+            [
+                {
+                    "type": "heading",
+                    "x": 0,
+                    "w": 200,
+                    "h": 56,
+                    "badges": [entry.entity_id],
+                }
+            ]
+        )
+        images = []
+        for icon in ["mdi:home", "mdi:clock"]:
+            er.async_get(hass).async_update_entity(entry.entity_id, icon=icon)
+            await entity._async_refresh(None)
+            images.append(await entity.async_image())
+        assert images[0] is not None
+        assert images[1] is not None
+        assert images[0] != images[1]
+
     async def test_refresh_wires_resolved_icon_into_render_config(
         self, make_entity: Callable[..., Any], hass: HomeAssistant
     ) -> None:

@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
@@ -79,6 +80,10 @@ def _build_heading_context(
 
     Badges are resolved right-to-left from the right edge; any badge
     that would overlap the heading text is silently omitted.
+    Badge icons follow the current HA entity icon, shown by default.
+    Legacy per-badge ``icon`` overrides are ignored; customise the
+    entity in HA instead. Explicit ``show_icon: false`` still hides
+    the icon, and ``show_state: false`` produces an icon-only badge.
 
     ``heading_align`` controls the heading text's horizontal anchor:
 
@@ -116,6 +121,7 @@ def _build_heading_context(
         _compute_metrics,
         _load_font,
     )
+    from ..svg_render import _mdi_svg_filter
 
     x = widget.get("x", PADDING)
     svg_w = _widget_dim(widget, "w", config["width"] - x)
@@ -192,20 +198,20 @@ def _build_heading_context(
     badge_font_sz = m.font_secondary
     badge_font = _load_font(badge_font_sz)
     badge_icon_sz = badge_font_sz
+    # Keep each icon visually grouped with its value at every row size.
+    badge_icon_gap = max(1, round(badge_font.getlength(" ")))
 
     # Resolve badge states and compute widths.
     badge_data: list[_HeadingBadgeDatum] = []
     for badge_cfg in raw_badges:
         if isinstance(badge_cfg, str):
             entity_id: str = badge_cfg
-            show_icon = False
+            show_icon = True
             show_state = True
-            badge_icon_override = ""
         else:
             entity_id = badge_cfg.get("entity", "")
-            show_icon = badge_cfg.get("show_icon", False)
+            show_icon = badge_cfg.get("show_icon", True)
             show_state = badge_cfg.get("show_state", True)
-            badge_icon_override = badge_cfg.get("icon", "")
         state = states.get(entity_id)
         if state is None:
             continue
@@ -217,21 +223,22 @@ def _build_heading_context(
 
         badge_icon_svg: markupsafe.Markup | str = ""
         if show_icon:
-            # Only mdi:-prefixed overrides are recognised; other
-            # values fall through to device_class resolution.
-            b_override: str | None = None
-            if badge_icon_override.startswith("mdi:"):
-                b_override = badge_icon_override[4:]
-            domain = entity_id.split(".")[0]
-            badge_icon_svg, _ = _resolve_icon_svg(
-                b_override,
-                attrs,
-                state_val,
-                domain,
-                badge_icon_sz,
-            )
+            # The async pipeline resolves HA's current icon. Never let
+            # widget overrides or local class maps replace that choice.
+            badge_icon = state.get("entity_icon", attrs.get("icon", ""))
+            if isinstance(badge_icon, str) and badge_icon.startswith("mdi:"):
+                with contextlib.suppress(FileNotFoundError, ValueError):
+                    badge_icon_svg = _mdi_svg_filter(
+                        badge_icon[4:], badge_icon_sz
+                    )
 
-        icon_w = (badge_icon_sz + m.inner_gap) if badge_icon_svg else 0
+        if not badge_icon_svg and not badge_text:
+            continue
+        icon_w = (
+            badge_icon_sz + (badge_icon_gap if badge_text else 0)
+            if badge_icon_svg
+            else 0
+        )
         text_w = round(badge_font.getlength(badge_text))
         badge_data.append(
             _HeadingBadgeDatum(
@@ -244,18 +251,22 @@ def _build_heading_context(
             )
         )
 
-    # Position badges right-to-left.  Once a badge cannot fit
-    # (its left edge would overlap the heading text), it and
-    # all remaining badges to its left in config order are
-    # dropped.  The overlap boundary is always the icon-derived
-    # left edge (``min_text_x``), regardless of ``heading_align``,
-    # since that is where left-aligned text starts and where
-    # right-aligned text is clamped to below.
+    # Reserve the heading's measured width for either alignment before
+    # placing badges. Otherwise adding an icon can push a badge onto
+    # the text even though it still clears the heading's left edge.
+    heading_w = 0
+    if heading_text:
+        heading_font = _load_font(font_sz, medium=is_title)
+        heading_w = round(heading_font.getlength(heading_text))
+    badge_min_left = min_text_x + heading_w + m.inner_gap
+
+    # Pack from the right, dropping a badge and the remaining badges to
+    # its left in config order when it would overlap the heading.
     badge_right = svg_w - r_inset - rpad
     rendered_badges: list[dict[str, object]] = []
     for bd in reversed(badge_data):
         new_right = badge_right - bd.total_w
-        if new_right < min_text_x + m.inner_gap:
+        if new_right < badge_min_left:
             break
         badge_cy = svg_h // 2
         rendered_badges.insert(
@@ -285,9 +296,7 @@ def _build_heading_context(
         text_anchor = "end"
         text_x = badge_right
         if heading_text:
-            heading_font = _load_font(font_sz, medium=is_title)
-            text_w = round(heading_font.getlength(heading_text))
-            text_x = max(text_x - text_w, min_text_x) + text_w
+            text_x = max(text_x - heading_w, min_text_x) + heading_w
 
     has_content = bool(heading_text) or bool(icon_svg) or bool(rendered_badges)
 
