@@ -282,6 +282,44 @@ class TestLocaleFormattingInWidgets:
     def _config(self, **overrides: object) -> dict[str, object]:
         return make_config(self._DEFAULTS, **overrides)
 
+    def test_meteogram_details_round_to_whole_numbers(self) -> None:
+        # Temperature and wind have no fractional digits in any locale.
+        """Verify fixed whole-number precision for meteogram details."""
+        forecast = [
+            {
+                "datetime": f"2026-05-02T{hour:02d}:00:00+00:00",
+                "temperature": -2.6,
+                "wind_speed": 12.6,
+                "wind_bearing": "NW",
+            }
+            for hour in range(10)
+        ]
+        cfg = self._config(
+            height=280,
+            language="pl",
+            number_format="decimal_comma",
+            states={
+                "weather.home": {
+                    "attributes": {
+                        "wind_speed_unit": "m/s",
+                        "forecast_hourly": forecast,
+                    }
+                }
+            },
+        )
+        for number_format in ("decimal_comma", "comma_decimal", "none"):
+            cfg["number_format"] = number_format
+            svg = render_widget_svg(
+                {"type": "meteogram", "entity": "weather.home", "h": 280},
+                cfg,
+            )
+            assert ">-3°</text>" in svg
+            assert ">13 m/s</text>" in svg
+            assert "-2,6°" not in svg
+            assert "12,6 m/s" not in svg
+            assert "-2.6°" not in svg
+            assert "12.6 m/s" not in svg
+
     def test_entity_widget_decimal_comma(self) -> None:
         # Entity widget with German locale must render comma decimal.
         widget = {

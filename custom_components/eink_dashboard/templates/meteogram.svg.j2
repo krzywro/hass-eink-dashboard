@@ -88,6 +88,16 @@
 {%- for icon in icons -%}
 <g transform="translate({{ icon.x }}, {{ icon.y }})">{{ icon.svg }}</g>
 {%- endfor -%}
+{#- Temperature labels follow the curve from below. A narrow white
+    halo keeps digits readable over the precipitation bars/grid. -#}
+{%- for label in temperature_labels -%}
+<text x="{{ label.x }}" y="{{ label.y }}"
+  font-family="Roboto" font-size="{{ detail_font_sz }}" font-weight="500"
+  text-anchor="{{ label.anchor }}" dominant-baseline="hanging"
+  stroke="{{ hex_white }}" stroke-width="{{ label_halo_w }}"
+  stroke-linejoin="round" paint-order="stroke fill"
+  fill="{{ hex_black }}">{{ label.temperature_label }}</text>
+{%- endfor -%}
 {#- Hour-axis ticks below the plot. -#}
 {%- for tick in hour_ticks -%}
 <text x="{{ tick.x }}" y="{{ hour_row_y }}"
@@ -96,6 +106,26 @@
   text-anchor="{{ tick.anchor }}"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ tick.label }}</text>
+{%- endfor -%}
+{#- Forecast wind below the hours: arrowhead points downwind, with
+    speed and the entity's unit underneath. Calm has no arrow. -#}
+{%- for wind in wind_columns -%}
+{%- if wind.angle is not none -%}
+<g transform="translate({{ wind.arrow_x }}, {{ wind_arrow_y }})
+  rotate({{ wind.angle }}) scale({{ wind_arrow_scale }})">
+<path d="M0,-10 L6,0 L2,0 L2,10 L-2,10 L-2,0 L-6,0 Z"
+  fill="{{ hex_black }}"/>
+</g>
+{%- elif not wind.calm -%}
+<text x="{{ wind.arrow_x }}" y="{{ wind_arrow_y }}"
+  font-family="Roboto" font-size="{{ detail_font_sz }}"
+  text-anchor="middle" dominant-baseline="central"
+  fill="{{ hex_gray }}">—</text>
+{%- endif -%}
+<text x="{{ wind.x }}" y="{{ wind_speed_y }}"
+  font-family="Roboto" font-size="{{ detail_font_sz }}"
+  text-anchor="{{ wind.anchor }}" dominant-baseline="hanging"
+  fill="{{ hex_black }}">{{ wind.speed_label }}</text>
 {%- endfor -%}
 {%- endcall -%}
 {#- No entity or no usable hourly forecast: render blank SVG. -#}

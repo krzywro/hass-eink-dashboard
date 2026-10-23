@@ -243,10 +243,12 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
   },
   meteogram: {
     label: "Meteogram",
-    description: "Hourly temperature curve with forecast icons",
+    description: "Hourly temperature curve with weather icons and wind",
     icon: "mdi:weather-cloudy",
     defaults: {
       type: "meteogram",
+      show_wind: true,
+      show_temperature_labels: true,
       x: 24,
       y: 0,
       w: 400,
@@ -1737,6 +1739,16 @@ export const SCHEMAS: Record<
           default: true,
           selector: { boolean: {} },
         },
+        {
+          name: "show_temperature_labels",
+          default: true,
+          selector: { boolean: {} },
+        },
+        {
+          name: "show_wind",
+          default: true,
+          selector: { boolean: {} },
+        },
       ],
     },
     {
@@ -1759,6 +1771,9 @@ export const SCHEMAS: Record<
 };
 
 export const HELPERS: Record<string, string> = {
+  show_wind:
+    "Arrowheads point in the direction the wind travels. "
+    + "Speed uses the weather entity's unit; calm wind has no arrow.",
   row_height:
     "Rows never grow taller than this; extra widget height stays "
     + "empty below the list.  Leave empty to use the display's "
@@ -1869,6 +1884,8 @@ export const LABELS: Record<string, string> = {
   hours: "Hours to show",
   show_cloud_cover: "Show cloud cover",
   show_precipitation: "Show precipitation",
+  show_temperature_labels: "Show temperature labels",
+  show_wind: "Show wind",
 };
 
 // ── HA component loader ──────────────────────────────────────────

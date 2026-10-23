@@ -1312,8 +1312,9 @@ export interface GraphWidget extends WidgetBase {
   decimals?: number;
 }
 
-/** Hourly temperature curve with forecast icons and day markers. */
+/** Hourly temperature curve with forecast conditions and wind details. */
 export interface MeteogramWidget extends WidgetBase {
+  /** Select the hourly meteogram renderer. */
   type: "meteogram";
   /** HA weather entity ID; must support hourly forecasts. */
   entity?: string;
@@ -1323,6 +1324,13 @@ export interface MeteogramWidget extends WidgetBase {
   show_cloud_cover?: boolean;
   /** Show precipitation bars below the curve. Default: true. */
   show_precipitation?: boolean;
+  /** Show numeric temperatures below the curve. Default: true. */
+  show_temperature_labels?: boolean;
+  /**
+   * Show wind arrows and speed with the entity's unit below the hours.
+   * Arrowheads point downwind; calm wind has no arrow. Default: true.
+   */
+  show_wind?: boolean;
   /** Decorative frame style. */
   card_style?: CardStyle;
 }

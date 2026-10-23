@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Meteogram temperatures below the curve, plus wind direction arrows
+  and speed with units below the hours. Both can be disabled in the
+  widget editor; arrowheads point downwind.
+
+### Changed
+
+- Meteogram annotation columns now share a timestamp-based cadence,
+  automatically spaced to fit the widget and selected forecast window.
+
 ## [0.8.0] - 2026-09-30
 
 ### Added

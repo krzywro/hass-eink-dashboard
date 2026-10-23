@@ -15,8 +15,9 @@
 """Meteogram widget context builder.
 
 Renders a temperature curve over an hourly weather forecast, with
-condition icons, day-boundary markers, and an optional cloud-coverage
-band.  Built on the same low-level helpers as the ``GRAPH`` widget
+condition icons, temperature labels, forecast wind, day-boundary
+markers, and an optional cloud-coverage band. Built on the same
+low-level helpers as the ``GRAPH`` widget
 (see ``widgets/graph/``) rather than duplicating time-axis/path
 logic, per the architecture decided in the meteogram design doc.
 """
@@ -62,12 +63,29 @@ _MIN_HOURS = 8
 _MAX_HOURS = 120
 _DEFAULT_HOURS = 24
 
-# Condition icons are placed every this many hours -- dense enough to
-# read the weather trend, sparse enough not to clutter a ~300-400px
-# wide e-ink card (WEATHER.md decision: "every 2-3h, not hourly").
-_ICON_STEP_HOURS = 3
-# Hour-axis ticks use the same cadence as icons.
-_HOUR_TICK_STEP_HOURS = 3
+# Forecast columns share a minimum time cadence, expanded when labels
+# would overlap. The curve and precipitation keep every forecast point.
+_COLUMN_STEP_HOURS = 3
+
+# HA bearings describe the origin of the wind, clockwise from north.
+_COMPASS_POINTS = (
+    "N",
+    "NNE",
+    "NE",
+    "ENE",
+    "E",
+    "ESE",
+    "SE",
+    "SSE",
+    "S",
+    "SSW",
+    "SW",
+    "WSW",
+    "W",
+    "WNW",
+    "NW",
+    "NNW",
+)
 
 # Layout ratios, all relative to the widget's total height "h" so
 # the widget scales proportionally (mirrors _compute_metrics()'s
@@ -100,14 +118,17 @@ def _build_meteogram_context(
     temperature gradient (matching the weather widget's min/max
     bar), with condition icons floating above the curve, dashed
     day-boundary markers, an optional cloud-coverage band, optional
-    precipitation bars, and hour-axis ticks below the plot.
+    precipitation bars, temperatures below the curve, and a wind
+    footer below the hour-axis ticks. Arrowheads point downwind.
 
     Args:
         widget: Widget config dict.  Recognised keys: ``entity``
             (HA weather entity ID), ``hours`` (forecast window in
             hours, clamped to 8-120; default 24), ``show_cloud_cover``
             (bool, default ``True``), ``show_precipitation`` (bool,
-            default ``True``), ``card_style``, ``x``, ``w``, ``h``.
+            default ``True``), ``show_wind`` and
+            ``show_temperature_labels`` (bool, both default ``True``),
+            ``card_style``, ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``states``, and
             ``display_levels``.
 
@@ -126,6 +147,7 @@ def _build_meteogram_context(
     display_levels = config.get("display_levels", 16)
     show_cloud_cover = bool(widget.get("show_cloud_cover", True))
     show_precipitation = bool(widget.get("show_precipitation", True))
+    show_temperature_labels = bool(widget.get("show_temperature_labels", True))
 
     entity: str = widget.get("entity", "")
     states_dict: dict[str, Any] = config.get("states", {})
@@ -217,24 +239,50 @@ def _build_meteogram_context(
     hour_font_sz = max(9, round(h * _HOUR_FONT_RATIO))
     grid_font_sz = max(9, round(h * _GRID_FONT_RATIO))
     precip_font_sz = max(9, round(h * _PRECIP_LABEL_FONT_RATIO))
+    detail_font_sz = hour_font_sz
+    detail_row_h = math.ceil(detail_font_sz * 1.3)
+    wind_arrow_size = max(10, round(h * 0.065))
     curve_stroke_w = max(2, round(h * 0.012))
     grid_stroke_w = max(1, curve_stroke_w // 2)
 
+    columns, show_wind = _forecast_columns(
+        points,
+        entry_by_ts,
+        attrs.get("wind_speed_unit"),
+        config,
+        content_left,
+        content_right,
+        map_x,
+        icon_size,
+        detail_font_sz,
+        bool(widget.get("show_wind", True)),
+        show_temperature_labels,
+    )
+    wind_footer_h = (
+        wind_arrow_size + detail_row_h + 2 * row_gap if show_wind else 0
+    )
     plot_top = day_label_h + row_gap
     hour_row_y = h - row_gap - hour_row_h
+    hour_row_y -= wind_footer_h
     plot_bottom = hour_row_y - row_gap
+    wind_arrow_y = hour_row_y + hour_row_h + row_gap + wind_arrow_size / 2
+    wind_speed_y = wind_arrow_y + wind_arrow_size / 2 + row_gap
 
     y_min_raw, y_max_raw = _y_bounds(temps, None, None, None)
     y_min = math.floor(y_min_raw / 5) * 5 - 5
     y_max = math.ceil(y_max_raw / 5) * 5 + 5
 
     scale_top = plot_top + icon_lane_h
-    scale_h = max(1, plot_bottom - scale_top)
+    temperature_lane_h = (
+        detail_row_h + 2 * row_gap if show_temperature_labels else 0
+    )
+    scale_bottom = plot_bottom - temperature_lane_h
+    scale_h = max(1, scale_bottom - scale_top)
 
     def map_y(temp: float) -> int:
         """Map a temperature value to a Y pixel coordinate."""
         frac = (temp - y_min) / (y_max - y_min)
-        return round(plot_bottom - frac * scale_h)
+        return round(scale_bottom - frac * scale_h)
 
     # --- Y-axis gridlines/labels ---
     step = 5 if (y_max - y_min) <= 30 else 10
@@ -354,8 +402,8 @@ def _build_meteogram_context(
 
     # --- Condition icons, floating above the curve ---
     icons: list[dict[str, object]] = []
-    for i in range(0, len(points), _ICON_STEP_HOURS):
-        ts, temp = points[i]
+    for column in columns:
+        ts, temp = column["ts"], column["temperature"]
         entry = entry_by_ts.get(ts)
         condition = entry.get("condition") if entry else None
         if not isinstance(condition, str) or not condition:
@@ -383,32 +431,39 @@ def _build_meteogram_context(
         )
 
     # --- Hour-axis ticks ---
-    # Center-anchoring every tick would let a tick sitting right at
-    # content_left/content_right (the first tick always does; the
-    # last one does too when the step divides evenly into the
-    # window) spill half its width past the plot edge -- harmless
-    # at small hour_font_sz, but it grows with h and can clip past
-    # the widget's own canvas edge on tall widgets. Anchor those
-    # edge ticks inward instead -- the same idea as the "start"/
-    # "end" anchoring GRAPH uses for its two fixed oldest/newest
-    # X-axis labels, applied here per-tick since hour_ticks is a
-    # full series where only the first/last entry sits at an edge.
+    # Shared column anchors turn edge labels inward instead of letting
+    # centered text spill past the plot. This matters especially on
+    # tall widgets, whose fonts grow while card padding stays fixed.
     hour_ticks: list[dict[str, object]] = []
-    for i in range(0, len(points), _HOUR_TICK_STEP_HOURS):
-        tick_x = map_x(points[i][0])
-        if tick_x <= content_left:
-            anchor = "start"
-        elif tick_x >= content_right:
-            anchor = "end"
-        else:
-            anchor = "middle"
+    for column in columns:
+        tick_x = column["x"]
         hour_ticks.append(
             {
                 "x": tick_x,
-                "label": times[i].strftime("%H"),
-                "anchor": anchor,
+                "label": datetime.datetime.fromtimestamp(
+                    column["ts"], tz=tz
+                ).strftime("%H"),
+                "anchor": column["anchor"],
             }
         )
+
+    temperature_labels = (
+        _temperature_labels(
+            columns,
+            curve_pts,
+            detail_font_sz,
+            row_gap,
+            plot_bottom,
+            content_left,
+            content_right,
+            precip_bars,
+            precip_font_sz,
+            grid_lines,
+            grid_font_sz,
+        )
+        if show_temperature_labels
+        else []
+    )
 
     return {
         "w": w,
@@ -439,7 +494,270 @@ def _build_meteogram_context(
         "hour_ticks": hour_ticks,
         "hour_row_y": hour_row_y,
         "hour_font_sz": hour_font_sz,
+        "temperature_labels": temperature_labels,
+        "detail_font_sz": detail_font_sz,
+        "label_halo_w": max(2, round(h * 0.008)),
+        "wind_columns": columns if show_wind else [],
+        "wind_arrow_y": wind_arrow_y,
+        "wind_arrow_scale": wind_arrow_size / 20,
+        "wind_speed_y": wind_speed_y,
     }
+
+
+def _finite_number(value: object) -> float | None:
+    """Parse a finite numeric weather value, excluding booleans.
+
+    Args:
+        value: Optional raw forecast value.
+
+    Returns:
+        A finite float, or None for missing or invalid data.
+    """
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(str(value))
+    except (ValueError, OverflowError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _wind_details(
+    entry: dict[str, object],
+    unit: object,
+    config: DisplayConfig,
+) -> dict[str, Any]:
+    """Normalize forecast wind without borrowing current observations.
+
+    Args:
+        entry: One hourly forecast entry.
+        unit: Weather entity's wind speed unit.
+        config: Display number-format preferences.
+
+    Returns:
+        Speed label, downwind arrow rotation, calm flag, and availability.
+        Unknown components use a dash; calm wind has no direction arrow.
+    """
+    speed = _finite_number(entry.get("wind_speed"))
+    if speed is not None and speed < 0:
+        speed = None
+    bearing = entry.get("wind_bearing")
+    direction = _finite_number(bearing)
+    if isinstance(bearing, str) and bearing.strip().upper() in _COMPASS_POINTS:
+        direction = _COMPASS_POINTS.index(bearing.strip().upper()) * 22.5
+    has_speed = (
+        speed is not None and isinstance(unit, str) and bool(unit.strip())
+    )
+    calm = speed == 0
+    return {
+        "speed_label": (
+            f"{_fmt(str(entry['wind_speed']), config, 0)} {str(unit).strip()}"
+            if has_speed
+            else "—"
+        ),
+        # SVG's unrotated arrow points north; invert the meteorological
+        # origin azimuth so the arrowhead follows the moving air.
+        "angle": (direction + 180) % 360
+        if direction is not None and not calm
+        else None,
+        "calm": calm,
+        "available": has_speed or (direction is not None and not calm),
+    }
+
+
+def _forecast_columns(
+    points: list[tuple[float, float]],
+    entries: dict[float, dict[str, object]],
+    unit: object,
+    config: DisplayConfig,
+    left: int,
+    right: int,
+    map_x: Callable[[float], int],
+    icon_size: int,
+    font_size: int,
+    show_wind: bool,
+    show_temperatures: bool,
+) -> tuple[list[dict[str, Any]], bool]:
+    """Select shared, time-based annotation columns that fit the chart.
+
+    Args:
+        points: Numeric forecast points in timestamp order.
+        entries: Original forecasts keyed by timestamp.
+        unit: Wind speed unit from the weather entity.
+        config: Display number-format preferences.
+        left: Content area's left edge.
+        right: Content area's right edge.
+        map_x: Timestamp-to-pixel mapper.
+        icon_size: Condition icon size in pixels.
+        font_size: Detail and hour font size in pixels.
+        show_wind: Whether to show available forecast wind.
+        show_temperatures: Whether to reserve temperature label widths.
+
+    Returns:
+        Selected annotation columns and whether a wind footer is needed.
+        All readings come from exact timestamps, with no wind interpolation.
+    """
+    from ..render import _load_font
+
+    font = _load_font(font_size)
+    temperature_font = _load_font(font_size, medium=True)
+    candidates: list[dict[str, Any]] = [
+        {
+            "ts": ts,
+            "temperature": temp,
+            "x": map_x(ts),
+            "temperature_label": f"{_fmt(str(temp), config, 0)}°",
+            **_wind_details(entries.get(ts, {}), unit, config),
+        }
+        for ts, temp in points
+    ]
+    show_wind = show_wind and any(c["available"] for c in candidates)
+    widths = [float(icon_size), font.getlength("00")]
+    for column in candidates:
+        if show_wind:
+            widths.append(font.getlength(column["speed_label"]))
+        if show_temperatures:
+            widths.append(
+                temperature_font.getlength(column["temperature_label"])
+            )
+    # Leave a full font-size gap, including at inward-anchored edge
+    # labels, whose entire width extends into the neighbouring slot.
+    max_width = max(widths)
+    spacing = max_width * 1.5 + font_size
+    span = points[-1][0] - points[0][0]
+    step_hours = max(
+        _COLUMN_STEP_HOURS,
+        math.ceil(
+            span / 3600 * spacing / max(1, right - left) / _COLUMN_STEP_HOURS
+        )
+        * _COLUMN_STEP_HOURS,
+    )
+    columns: list[dict[str, Any]] = []
+    next_ts = points[0][0]
+    for column in candidates:
+        if column["ts"] < next_ts:
+            continue
+        column["anchor"] = (
+            "start"
+            if column["x"] - max_width / 2 <= left
+            else "end"
+            if column["x"] + max_width / 2 >= right
+            else "middle"
+        )
+        # Center edge arrows over their inward-anchored speed text.
+        half_width = max(
+            icon_size / 2, font.getlength(column["speed_label"]) / 2
+        )
+        column["arrow_x"] = max(
+            left + half_width, min(column["x"], right - half_width)
+        )
+        columns.append(column)
+        next_ts = column["ts"] + step_hours * 3600
+    return columns, show_wind
+
+
+def _temperature_labels(
+    columns: list[dict[str, Any]],
+    curve: list[tuple[int, int]],
+    font_size: int,
+    gap: int,
+    bottom: int,
+    left: int,
+    right: int,
+    precip_bars: list[dict[str, object]],
+    precip_font_size: int,
+    grid_lines: list[dict[str, object]],
+    grid_font_size: int,
+) -> list[dict[str, Any]]:
+    """Place temperature text below the curve clear of other labels.
+
+    Args:
+        columns: Shared annotation timestamps and formatted readings.
+        curve: Full temperature curve control points in pixels.
+        font_size: Temperature font size in pixels.
+        gap: Minimum separation between annotations.
+        bottom: Plot's lower edge, above hour labels.
+        left: Plot's left edge.
+        right: Plot's right edge.
+        precip_bars: Precipitation bars with optional amount labels.
+        precip_font_size: Precipitation label font size in pixels.
+        grid_lines: Grid lines with their left-axis labels.
+        grid_font_size: Grid label font size in pixels.
+
+    Returns:
+        Temperature text positions; labels that cannot fit are omitted.
+        Precipitation bars and their priority-selected labels are retained.
+    """
+    from ..render import _load_font
+
+    font = _load_font(font_size, medium=True)
+    precip_font = _load_font(precip_font_size, bold=True)
+    grid_font = _load_font(grid_font_size)
+    axis_right = left + max(
+        (grid_font.getlength(str(grid["label"])) for grid in grid_lines),
+        default=0,
+    )
+    obstacles: list[tuple[float, float, float, float]] = []
+    for bar in precip_bars:
+        if not bar.get("label"):
+            continue
+        half = precip_font.getlength(str(bar["label"])) / 2
+        x, y = float(str(bar["label_x"])), float(str(bar["label_y"]))
+        obstacles.append((x - half, y - precip_font_size, x + half, y + gap))
+    for grid in grid_lines:
+        y = float(str(grid["label_y"]))
+        obstacles.append(
+            (
+                left,
+                y - grid_font_size,
+                left + grid_font.getlength(str(grid["label"])),
+                y + gap,
+            )
+        )
+    labels: list[dict[str, Any]] = []
+    text_h = math.ceil(font_size * 1.3)
+    for column in columns:
+        label = column["temperature_label"]
+        width = font.getlength(label)
+        x = column["x"]
+        x_left = (
+            x
+            if column["anchor"] == "start"
+            else (x - width if column["anchor"] == "end" else x - width / 2)
+        )
+        # At the first column, move text just past the Y-axis labels.
+        # Moving it down instead would cascade through every grid label
+        # and detach the reading from its temperature curve.
+        if column["anchor"] == "start":
+            x_left = max(x_left, axis_right + gap)
+            x = x_left
+        x_right = x_left + width
+        if x_left < left or x_right > right:
+            continue
+        # Midpoint quadratic curves stay within their control-point
+        # hull. Reserving the lower envelope across the text width
+        # keeps labels below steep slopes as well as flat segments.
+        nearby = [
+            max(a[1], b[1])
+            for a, b in pairwise(curve)
+            if a[0] <= x_right and b[0] >= x_left
+        ]
+        y = max(nearby or [curve[0][1]]) + gap
+        for obs_left, obs_top, obs_right, obs_bottom in sorted(
+            obstacles, key=lambda box: box[1]
+        ):
+            if (
+                x_left < obs_right + gap
+                and x_right > obs_left - gap
+                and y < obs_bottom + gap
+                and y + text_h > obs_top - gap
+            ):
+                y = math.ceil(obs_bottom + gap)
+        if y + text_h > bottom:
+            continue
+        labels.append({**column, "x": x, "y": y})
+        obstacles.append((x_left, y, x_right, y + text_h))
+    return labels
 
 
 def _prune_overlapping_day_markers(

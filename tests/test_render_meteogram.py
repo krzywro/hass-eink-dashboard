@@ -19,6 +19,9 @@ import re
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, ClassVar
 
+import pytest
+from PIL import ImageChops
+
 from custom_components.eink_dashboard.const import (
     COLOR_GRAY,
     DEFAULT_ROW_H,
@@ -38,6 +41,7 @@ from custom_components.eink_dashboard.widgets.meteogram import (
 from tests.helpers import (
     assert_all_white,
     assert_card_border,
+    assert_has_dark_pixels,
     assert_has_gray_pixels,
     assert_scales_proportionally,
     content_bbox,
@@ -246,10 +250,7 @@ MOCK_METEOGRAM_STATES: dict[str, dict[str, object]] = {
 class TestRenderMeteogram:
     """Verify rendering of meteogram widgets.
 
-    The renderer (``widgets/meteogram.py`` + ``templates/
-    meteogram.svg.j2``) does not exist yet — every test here must
-    FAIL until it is implemented. Meteogram is a chart widget built
-    on the same submodules as ``GRAPH`` (see
+    Meteogram is a chart widget built on the same submodules as ``GRAPH`` (see
     ``widgets/graph/``), so its structural/scaling tests mirror
     ``TestRenderGraph`` rather than the row-based widget pattern.
     """
@@ -446,8 +447,9 @@ class TestRenderMeteogram:
         # hour ticks pair an explicit text-anchor with
         # dominant-baseline="hanging"; day labels use "hanging" with
         # no text-anchor attribute at all).
-        widget = self._widget(h=550, hours=72)
-        svg = render_widget_svg(widget, self._config())
+        # A wide chart isolates anchoring from adaptive column thinning.
+        widget = self._widget(w=5000, h=550, hours=72)
+        svg = render_widget_svg(widget, self._config(width=5000))
         assert re.search(
             r'<text[^>]*text-anchor="start"[^>]*'
             r'dominant-baseline="hanging"[^>]*>00</text>',
@@ -793,6 +795,278 @@ class TestRenderMeteogram:
         )
         assert bar_count == 2
         assert label_count == 0
+
+
+class TestMeteogramDetails:
+    """Verify forecast details through the public PNG renderer."""
+
+    _config = TestRenderMeteogram._config
+    _widget = TestRenderMeteogram._widget
+    _DEFAULTS = TestRenderMeteogram._DEFAULTS
+
+    def _detail_config(
+        self,
+        *,
+        speed: object = 12.5,
+        bearing: object = 0,
+        unit: object = "km/h",
+        offsets: list[float] | None = None,
+        **overrides: object,
+    ) -> dict[str, Any]:
+        """Build flat hourly weather with independently editable wind.
+
+        Args:
+            speed: Forecast wind speed, including invalid test values.
+            bearing: Forecast origin azimuth or compass direction.
+            unit: Entity wind unit; None simulates a missing unit.
+            offsets: Forecast hours since the fixture start.
+            **overrides: Display configuration overrides.
+
+        Returns:
+            Configuration with an isolated forecast and no condition icons.
+        """
+        if offsets is None:
+            offsets = list(range(25))
+        attrs = {
+            "forecast_hourly": [
+                {
+                    "datetime": (
+                        _HOURLY_START + timedelta(hours=offset)
+                    ).isoformat(),
+                    "temperature": 20,
+                    "wind_speed": speed,
+                    "wind_bearing": bearing,
+                }
+                for offset in offsets
+            ],
+            "wind_speed_unit": unit,
+            # Current observations must never replace missing forecasts.
+            "wind_speed": 99,
+            "wind_bearing": 180,
+        }
+        return self._config(
+            states={"weather.home": {"attributes": attrs}}, **overrides
+        )
+
+    def test_details_enabled_by_default(self) -> None:
+        # Existing configurations receive both details without migration.
+        """Verify details enabled by default."""
+        cfg = self._detail_config()
+        assert render_dashboard([self._widget()], cfg) == render_dashboard(
+            [self._widget(show_wind=True, show_temperature_labels=True)],
+            cfg,
+        )
+
+    def test_wind_toggle_changes_render(self) -> None:
+        # Disabling the footer releases its space to the plot.
+        """Verify wind toggle changes render."""
+        cfg = self._detail_config()
+        assert render_dashboard([self._widget()], cfg) != render_dashboard(
+            [self._widget(show_wind=False)], cfg
+        )
+
+    def test_temperature_labels_below_flat_curve(self) -> None:
+        # Black labels appear inside the plot away from axis/grid labels.
+        """Verify temperature labels below flat curve."""
+        img = render_to_image([self._widget()], self._detail_config())
+        assert_has_dark_pixels(img, 200, 100, 500, 190, threshold=80)
+
+    def test_temperature_toggle_changes_render_without_conditions(
+        self,
+    ) -> None:
+        # Numeric labels do not depend on the availability of weather icons.
+        """Verify temperature toggle changes render without conditions."""
+        cfg = self._detail_config()
+        assert render_dashboard([self._widget()], cfg) != render_dashboard(
+            [self._widget(show_temperature_labels=False)], cfg
+        )
+
+    def test_speed_unit_changes_render(self) -> None:
+        # Forecast speed uses the weather entity's actual unit.
+        """Verify speed unit changes render."""
+        widget = self._widget()
+        assert render_dashboard(
+            [widget], self._detail_config(unit="m/s")
+        ) != render_dashboard([widget], self._detail_config(unit="mph"))
+
+    @pytest.mark.parametrize(
+        ("bearing", "degrees"),
+        [
+            ("N", 0),
+            ("E", 90),
+            ("S", 180),
+            ("W", 270),
+            ("NW", 315),
+            (" nne ", 22.5),
+            (360, 0),
+            (450, 90),
+        ],
+    )
+    def test_compass_and_numeric_bearings_match(
+        self,
+        bearing: object,
+        degrees: float,
+    ) -> None:
+        # Normalize compass names and azimuths to the same arrow rotation.
+        """Verify compass and numeric bearings match."""
+        widget = self._widget()
+        assert render_dashboard(
+            [widget], self._detail_config(bearing=bearing)
+        ) == render_dashboard([widget], self._detail_config(bearing=degrees))
+
+    @pytest.mark.parametrize("bearing", [0, 90, 180, 270])
+    def test_arrow_points_downwind(self, bearing: int) -> None:
+        # More arrowhead ink lies downwind of its center for each axis.
+        """Verify arrow points downwind."""
+        img = render_to_image(
+            [self._widget()], self._detail_config(bearing=bearing)
+        )
+        opposite = render_to_image(
+            [self._widget()],
+            self._detail_config(bearing=(bearing + 180) % 360),
+        )
+        bbox = ImageChops.difference(img, opposite).getbbox()
+        assert bbox is not None, "wind direction must change the arrow"
+        left, top, right, bottom = bbox
+        assert top > img.height // 2, "wind belongs below the plot"
+        arrow_ink = img.point(lambda value: 255 if value < 80 else 0)
+        if bearing in (0, 180):
+            mid = (top + bottom) // 2
+            before = sum(arrow_ink.crop((left, top, right, mid)).tobytes())
+            after = sum(arrow_ink.crop((left, mid, right, bottom)).tobytes())
+        else:
+            mid = (left + right) // 2
+            before = sum(arrow_ink.crop((left, top, mid, bottom)).tobytes())
+            after = sum(arrow_ink.crop((mid, top, right, bottom)).tobytes())
+        assert (after > before) == (bearing in (0, 270))
+
+    def test_calm_has_no_direction(self) -> None:
+        # Calm forecasts show a zero speed independently of their bearing.
+        """Verify calm has no direction."""
+        widget = self._widget()
+        cfg = self._detail_config(speed=0)
+        calm = render_dashboard([widget], cfg)
+        assert calm == render_dashboard(
+            [widget], self._detail_config(speed=0, bearing=180)
+        )
+        assert calm != render_dashboard([widget], self._detail_config(speed=1))
+
+    @pytest.mark.parametrize("speed", [-1, float("nan"), float("inf"), "bad"])
+    def test_invalid_speed_matches_missing_speed(self, speed: object) -> None:
+        # Invalid speeds render a placeholder instead of breaking the SVG.
+        """Verify invalid speed matches missing speed."""
+        widget = self._widget()
+        assert render_dashboard(
+            [widget], self._detail_config(speed=speed)
+        ) == render_dashboard([widget], self._detail_config(speed=None))
+
+    @pytest.mark.parametrize("bearing", [None, "bad", float("nan"), False])
+    def test_invalid_bearing_keeps_speed(self, bearing: object) -> None:
+        # An unknown direction must not invent a north-pointing arrow.
+        """Verify invalid bearing keeps speed."""
+        widget = self._widget()
+        missing = render_dashboard([widget], self._detail_config(bearing=None))
+        assert (
+            render_dashboard([widget], self._detail_config(bearing=bearing))
+            == missing
+        )
+        assert missing != render_dashboard([widget], self._detail_config())
+
+    def test_no_unit_does_not_invent_speed_unit(self) -> None:
+        # Without a unit the speed stays unknown, even with valid bearing.
+        """Verify no unit does not invent speed unit."""
+        widget = self._widget()
+        assert render_dashboard(
+            [widget], self._detail_config(unit=None)
+        ) == render_dashboard([widget], self._detail_config(speed=None))
+
+    def test_absent_wind_releases_footer(self) -> None:
+        # A completely unavailable forecast wind draws no empty footer.
+        """Verify absent wind releases footer."""
+        cfg = self._detail_config(speed=None, bearing=None)
+        assert render_dashboard([self._widget()], cfg) == render_dashboard(
+            [self._widget(show_wind=False)], cfg
+        )
+
+    def test_sampling_uses_timestamps(self) -> None:
+        # Extra half-hourly points must not change the displayed cadence.
+        """Verify sampling uses timestamps."""
+        widget = self._widget()
+        assert render_dashboard(
+            [widget], self._detail_config()
+        ) == render_dashboard(
+            [widget],
+            self._detail_config(offsets=[i / 2 for i in range(49)]),
+        )
+
+    def test_irregular_forecast_keeps_shared_times(self) -> None:
+        # Missing intermediate readings leave the same selected timestamps.
+        """Verify irregular forecast keeps shared times."""
+        widget = self._widget()
+        offsets = [0, 0.5, 3, 4, 6, 9, 10, 12, 15, 18, 21, 23, 24]
+        assert render_dashboard(
+            [widget], self._detail_config(offsets=offsets)
+        ) == render_dashboard([widget], self._detail_config())
+
+    def test_speed_is_below_arrows(self) -> None:
+        # Changing speed affects a row strictly below the direction arrows.
+        """Verify speed is below arrows."""
+        widget = self._widget()
+        base = render_to_image([widget], self._detail_config())
+        direction = render_to_image([widget], self._detail_config(bearing=180))
+        speed = render_to_image([widget], self._detail_config(speed=22.5))
+        arrow_bbox = ImageChops.difference(base, direction).getbbox()
+        speed_bbox = ImageChops.difference(base, speed).getbbox()
+        assert arrow_bbox is not None and speed_bbox is not None
+        assert speed_bbox[1] > arrow_bbox[3]
+
+    def test_wind_survives_two_level_optimization(self) -> None:
+        # Wind remains visible after the real monochrome output pipeline.
+        """Verify wind survives two level optimization."""
+        widget = self._widget(w=400, h=280, card_style="border")
+        cfg = self._detail_config(
+            width=400, height=280, optimize=True, display_levels=2
+        )
+        north = render_to_image([widget], cfg)
+        south = render_to_image(
+            [widget],
+            self._detail_config(
+                width=400,
+                height=280,
+                optimize=True,
+                display_levels=2,
+                bearing=180,
+            ),
+        )
+        assert north.mode == "1"
+        difference = ImageChops.difference(north, south).getbbox()
+        assert difference is not None
+        assert difference[1] > 200
+
+    @pytest.mark.parametrize("hours", [8, 24, 72, 120])
+    @pytest.mark.parametrize("size", [(400, 280), (240, 160), (800, 560)])
+    def test_details_do_not_touch_canvas_edges(
+        self,
+        hours: int,
+        size: tuple[int, int],
+    ) -> None:
+        # Dense forecasts retain padding, including rotated edge arrows.
+        """Verify details do not touch canvas edges."""
+        width, height = size
+        cfg = self._detail_config(
+            bearing=45,
+            speed=123.4,
+            offsets=list(range(121)),
+            width=width,
+            height=height,
+        )
+        img = render_to_image(
+            [self._widget(w=width, h=height, hours=hours)], cfg
+        )
+        bbox = content_bbox(img, 0, height // 2, width, height)
+        assert bbox is not None
+        assert bbox[0] > 0 and bbox[2] < width
+        assert bbox[3] < height
 
 
 class TestPruneOverlappingDayMarkers:

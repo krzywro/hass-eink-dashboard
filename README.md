@@ -173,6 +173,7 @@ The component ships a WYSIWYG Lovelace card for editing the dashboard layout.
 | Graph | Time-series line or bar chart for one or more numeric entities |
 | Gauge | Arc-style gauge for a single numeric entity |
 | Weather | Current conditions + N-day forecast with icons |
+| [Meteogram](docs/meteogram.md) | Hourly forecast with temperature and wind |
 | Calendar | Upcoming events from a Home Assistant calendar entity |
 | Device Battery | Battery level indicator for a device |
 | Frame | Decorative rounded-corner box for visual grouping |

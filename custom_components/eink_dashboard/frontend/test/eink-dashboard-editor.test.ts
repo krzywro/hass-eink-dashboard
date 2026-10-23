@@ -89,6 +89,14 @@ describe("WIDGET_TYPES", () => {
     }
   });
 
+  it("meteogram enables wind and temperature labels by default", () => {
+    // New widgets use the same detail defaults as the server renderer.
+    expect(WIDGET_TYPES.meteogram.defaults).toMatchObject({
+      show_wind: true,
+      show_temperature_labels: true,
+    });
+  });
+
   it("each entry has a non-empty description string", () => {
     // Picker grid shows descriptions to help users choose the right
     // widget.
@@ -209,6 +217,17 @@ describe("SCHEMAS", () => {
     expect(field?.default).toBe(true);
     expect(field?.selector).toHaveProperty("boolean");
   });
+
+  it.each(["show_wind", "show_temperature_labels"])(
+    "meteogram exposes enabled %s with a readable label",
+    (name) => {
+      // Both settings are flat boolean fields with documented defaults.
+      const field = findField(SCHEMAS.meteogram(DISPLAY), name);
+      expect(field?.default).toBe(true);
+      expect(field?.selector).toHaveProperty("boolean");
+      expect(LABELS[name]).toMatch(/^Show /);
+    },
+  );
 
   it("weather mode field offers full, forecast, and current options", () => {
     const schema = SCHEMAS.weather(DISPLAY);
