@@ -536,7 +536,7 @@ def _build_weather_context(
             ``temperature_entity``, ``humidity_entity``, ``show_sun_times``.
         config: Display config with ``width``, ``height``,
             ``states``, ``display_levels``, ``time_zone``, ``time_format``,
-            and ``language``.
+            ``language``, and optional HA-provided ``weather_labels``.
 
     Returns:
         Template context dict consumed by ``weather.svg.j2``.
@@ -849,6 +849,7 @@ def _build_weather_context(
     # consistent with today's hi/lo/precip shown above; falls back
     # to the real current date when no forecast data is available.
     feels_like_text = ""
+    feels_like_font_size = round(_WX_FONT_SM * scale)
     feels_like_x = 0
     feels_like_y = 0
     date_text = ""
@@ -868,10 +869,25 @@ def _build_weather_context(
     if mode == "current":
         row_y = detail_bottom
         if apparent_temperature is not None:
+            feels_like_label = (
+                config.get("weather_labels", {}).get("apparent_temperature")
+                or "Feels like"
+            )
             feels_like_text = (
-                f"Feels like: "
+                f"{feels_like_label}: "
                 f"{_fmt_temp(apparent_temperature, nf, lang)}{temp_unit}"
             )
+            # System translations can be much longer than the English label.
+            text_width = font_sm.getlength(feels_like_text)
+            if text_width > content_w:
+                feels_like_font_size = max(
+                    1,
+                    int(
+                        feels_like_font_size
+                        * max(1, content_w - 2)
+                        / text_width
+                    ),
+                )
             feels_like_x = content_left + content_w // 2
             feels_like_y = row_y + detail_gap + detail_icon_h // 2
             row_y += feels_like_h
@@ -1038,6 +1054,7 @@ def _build_weather_context(
         "precip_y": precip_y,
         "detail_items": detail_items,
         "feels_like_text": feels_like_text,
+        "feels_like_font_size": feels_like_font_size,
         "feels_like_x": feels_like_x,
         "feels_like_y": feels_like_y,
         "date_text": date_text,

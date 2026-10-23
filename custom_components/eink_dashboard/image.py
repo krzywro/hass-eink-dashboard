@@ -44,6 +44,7 @@ if TYPE_CHECKING:
 
 from . import (
     _async_get_locale,
+    _async_get_weather_labels,
     _enrich_display_precision,
     _enrich_entity_icons,
     _fetch_calendar_events,
@@ -237,6 +238,7 @@ class EinkDashboardImage(ImageEntity):
             date_format,
             time_format,
         ) = await _async_get_locale(self.hass, self._entry.options)
+        weather_labels = await _async_get_weather_labels(self.hass, language)
         try:
             async with self._refresh_lock:
                 states = self._build_states()
@@ -284,6 +286,7 @@ class EinkDashboardImage(ImageEntity):
                     "date_format": date_format,
                     "time_format": time_format,
                     "time_zone": _ha_time_zone(self.hass),
+                    "weather_labels": weather_labels,
                     "states": states,
                 }
                 level, is_charging = resolve_battery_level(

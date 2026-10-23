@@ -178,6 +178,52 @@ class TestWsRenderWidget:
         assert config["states"]["binary_sensor.example"]["entity_icon"] == (
             "mdi:door-open"
         )
+    @pytest.mark.parametrize("batch", [False, True])
+    @pytest.mark.parametrize(
+        ("language", "expected"),
+        [
+            ("pl", "Odczuwalna temperatura: 8,8°C"),
+            ("en", "Apparent temperature: 8.8°C"),
+        ],
+    )
+    async def test_feels_like_uses_home_assistant_translation(
+        self,
+        hass: HomeAssistant,
+        hass_ws_client: WebSocketGenerator,
+        batch: bool,
+        language: str,
+        expected: str,
+    ) -> None:
+        # Both preview commands use HA's catalog in the display language.
+        hass.states.async_set(
+            "weather.home",
+            "sunny",
+            {
+                "temperature": 11.7,
+                "apparent_temperature": 8.8,
+            },
+        )
+        client, entry = await _setup_entry(
+            hass,
+            hass_ws_client,
+            widgets=[
+                {
+                    "type": "weather",
+                    "entity": "weather.home",
+                    "mode": "current",
+                }
+            ],
+            options={**_DEFAULT_OPTIONS, "locale_language": language},
+        )
+        result = (
+            await _send_render_widgets(client, entry.entry_id)
+            if batch
+            else await _send_render_widget(client, entry.entry_id, 0)
+        )
+        assert result["success"]
+        svg = result["result"]["svgs"][0] if batch else result["result"]["svg"]
+        assert expected in svg
+        assert "Feels like" not in svg
 
     async def test_returns_svg_for_valid_widget(
         self, hass: HomeAssistant, hass_ws_client: WebSocketGenerator
