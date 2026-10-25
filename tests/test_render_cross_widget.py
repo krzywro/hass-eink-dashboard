@@ -23,6 +23,7 @@ from custom_components.eink_dashboard.const import (
     COLOR_BLACK,
     COLOR_GRAY,
     COLOR_LIGHT_GRAY,
+    COLOR_TEXT_GRAY,
     COLOR_WHITE,
     PADDING,
     color_to_hex,
@@ -227,6 +228,7 @@ class TestConsistencyContract:
             color_to_hex(COLOR_BLACK),
             color_to_hex(COLOR_WHITE),
             color_to_hex(COLOR_GRAY),
+            color_to_hex(COLOR_TEXT_GRAY),
             color_to_hex(COLOR_LIGHT_GRAY),
         }
         colors = set(re.findall(r"#[0-9a-f]{6}", svg.lower()))
@@ -258,6 +260,7 @@ class TestConsistencyContract:
             color_to_hex(COLOR_BLACK),
             color_to_hex(COLOR_WHITE),
             color_to_hex(COLOR_GRAY),
+            color_to_hex(COLOR_TEXT_GRAY),
             color_to_hex(COLOR_LIGHT_GRAY),
         }
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:

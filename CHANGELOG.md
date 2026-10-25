@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Meteogram dashed hourly grid in native four-level light gray,
+  including local-hour alignment through daylight-saving changes.
+  The **Show hourly grid** switch (`show_hour_grid`, enabled by default)
+  controls its visibility in the widget editor.
+
+### Changed
+
+- Meteogram cloud coverage uses a lighter tint. Four-level displays
+  retain visible clouds without requiring output dithering.
+- Precipitation amounts sit inside the bottom of their meteogram bars,
+  with a small inset. Labels that cannot fit inside a bar are omitted.
+
 ## [0.9.0] - 2026-10-23
 
 ### Added

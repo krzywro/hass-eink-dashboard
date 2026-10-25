@@ -46,6 +46,7 @@ from tests.helpers import (
     assert_scales_proportionally,
     content_bbox,
     make_config,
+    pixel,
     render_to_image,
 )
 
@@ -694,7 +695,7 @@ class TestRenderMeteogram:
         assert re.search(r'<rect[^>]*fill-opacity="0.5"', svg) is None
 
     def test_meteogram_precipitation_labels_present(self) -> None:
-        # Precipitation bars draw a formatted amount ("1.5") above
+        # Precipitation bars draw a formatted amount ("1.5") inside
         # them, distinguished from every other label by the
         # text-anchor="middle" + dominant-baseline="auto" combo the
         # template only uses for precip labels (day labels use
@@ -722,13 +723,11 @@ class TestRenderMeteogram:
             is None
         )
 
-    def test_meteogram_narrow_widget_prunes_some_precip_labels(
+    def test_meteogram_narrow_widget_omits_precip_labels(
         self,
     ) -> None:
-        # A narrow, multi-day window packs several precipitation
-        # bars close enough together that their labels would
-        # overlap -- some labels must be dropped (empty label),
-        # while every bar itself still renders.
+        # Multi-day bars remain visible when no amount fits inside them.
+        """Verify narrow multi-day bars omit overflowing amount labels."""
         widget = self._widget(w=300, hours=120)
         config = self._config()
         svg = render_widget_svg(widget, config)
@@ -741,12 +740,11 @@ class TestRenderMeteogram:
             )
         )
         assert bar_count > 0
-        assert 0 < label_count < bar_count
+        assert label_count == 0
 
-    def test_meteogram_precip_priority_keeps_highest(self) -> None:
-        # Two adjacent hours (0.5mm, 9.0mm) sit close enough in a
-        # narrow widget that only one label fits -- the higher
-        # amount must win, not whichever bar comes first.
+    def test_meteogram_narrow_bars_keep_geometry_without_labels(self) -> None:
+        # Neither label fits inside its narrow bar; both bars remain.
+        """Verify narrow precipitation bars do not overhang with text."""
         widget = self._widget(
             w=300, entity="weather.priority_precip", hours=24
         )
@@ -756,8 +754,8 @@ class TestRenderMeteogram:
             r'dominant-baseline="auto"[^>]*>([^<]*)</text>',
             svg,
         )
-        assert "9.0" in labels
-        assert "0.5" not in labels
+        assert labels == []
+        assert len(re.findall(r'<rect[^>]*fill-opacity="0.5"', svg)) == 2
 
     def test_meteogram_tiny_precip_bars_but_no_labels(self) -> None:
         # A 0.01mm reading rounds to "0.0" at the formatter's
@@ -776,12 +774,8 @@ class TestRenderMeteogram:
         )
 
     def test_meteogram_precip_labels_within_content_bounds(self) -> None:
-        # Precipitation at hours 0 and 24 places bars right at
-        # content_left/content_right, centered exactly on the
-        # boundary. A center-anchored label there is wider than the
-        # bar itself, so it would overhang past the card border --
-        # both edge labels must be suppressed while their bars still
-        # draw (previously they would render past the boundary).
+        # Large readings cannot fit inside the clamped edge bars, so
+        # their labels are suppressed while both bars still render.
         widget = self._widget(entity="weather.edge_precip")
         svg = render_widget_svg(widget, self._config())
 
@@ -795,6 +789,184 @@ class TestRenderMeteogram:
         )
         assert bar_count == 2
         assert label_count == 0
+
+
+class TestMeteogramGridAndPrecipitation:
+    """Verify hour boundaries, cloud tint, and internal bar labels."""
+
+    _widget = TestRenderMeteogram._widget
+
+    def _config(
+        self,
+        *,
+        start: datetime = _HOURLY_START,
+        duration: int = 8,
+        offsets: list[float] | None = None,
+        cloud: int = 0,
+        precipitation: float = 0,
+        **overrides: object,
+    ) -> dict[str, Any]:
+        """Build a constant forecast with one optional precipitation bar.
+
+        Args:
+            start: Time of the first forecast entry.
+            duration: Forecast duration in real hours.
+            offsets: Optional offsets of forecast entries from start.
+            cloud: Cloud coverage for every forecast point.
+            precipitation: Amount at the forecast midpoint only.
+            **overrides: Display settings, such as time zone or dithering.
+
+        Returns:
+            Display configuration without weather icons or forecast wind.
+        """
+        if offsets is None:
+            offsets = list(range(duration + 1))
+        forecast = [
+            {
+                "datetime": (start + timedelta(hours=hour)).isoformat(),
+                "temperature": 20,
+                "cloud_coverage": cloud,
+                "precipitation": precipitation if hour == duration / 2 else 0,
+            }
+            for hour in offsets
+        ]
+        return make_config(
+            {
+                "width": 700,
+                "height": 280,
+                "states": {
+                    "weather.home": {
+                        "attributes": {
+                            "forecast_hourly": forecast,
+                        }
+                    }
+                },
+            },
+            **overrides,
+        )
+
+    def test_hour_grid_enabled_by_default(self) -> None:
+        # Saved widgets without the new option keep the current hour grid.
+        """Verify omitted and explicitly enabled hourly grids match."""
+        cfg = self._config()
+        assert render_dashboard(
+            [self._widget(h=280, hours=8)], cfg
+        ) == render_dashboard(
+            [self._widget(h=280, hours=8, show_hour_grid=True)], cfg
+        )
+
+    def test_hour_grid_can_be_disabled(self) -> None:
+        # Turning off the hour grid still leaves the midnight separator.
+        """Verify the switch removes hourly lines without hiding days."""
+        cfg = self._config(start=datetime(2026, 5, 2, 20, 0, tzinfo=UTC))
+        widget = self._widget(
+            h=280,
+            hours=8,
+            show_temperature_labels=False,
+            show_hour_grid=False,
+        )
+        img = render_to_image([widget], cfg)
+        values = {pixel(img, x, y) for x in range(700) for y in range(36, 52)}
+        assert 170 not in values
+        assert any(pixel(img, 350, y) < 210 for y in range(36, 52))
+
+    @pytest.mark.parametrize(
+        ("start", "zone", "first_hour"),
+        [
+            ("2026-05-02T00:30:00+00:00", "UTC", 0.5),
+            ("2026-05-02T00:30:00+00:00", "Asia/Kathmandu", 0.75),
+            ("2026-03-29T00:30:00+00:00", "Europe/Warsaw", 0.5),
+            ("2026-10-24T23:30:00+00:00", "Europe/Warsaw", 0.5),
+        ],
+    )
+    def test_hour_lines_follow_local_hours_across_gaps_and_dst(
+        self,
+        start: str,
+        zone: str,
+        first_hour: float,
+    ) -> None:
+        # Even a sparse forecast draws every real local hour boundary.
+        """Verify native-gray hourly grid positions through clock changes."""
+        cfg = self._config(
+            start=datetime.fromisoformat(start),
+            offsets=[0, 8],
+            time_zone=zone,
+        )
+        widget = self._widget(h=280, hours=8, show_temperature_labels=False)
+        img = render_to_image([widget], cfg)
+        padding = _compute_metrics(DEFAULT_ROW_H).padding
+        expected = {
+            round(padding + (first_hour + i) / 8 * (700 - 2 * padding))
+            for i in range(8)
+        }
+        actual = {
+            x
+            for x in range(700)
+            if any(pixel(img, x, y) == 170 for y in range(36, 52))
+        }
+        assert actual == expected
+        first_x = min(expected)
+        assert {pixel(img, first_x, y) for y in range(36, 52)} == {170, 255}
+        assert_all_white(img, first_x, 250, first_x + 1, 252)
+
+    def test_midnight_separator_does_not_get_an_hour_line(self) -> None:
+        # Midnight keeps the day marker rather than a second hourly stroke.
+        """Verify hourly grid does not overdraw the midnight separator."""
+        cfg = self._config(start=datetime(2026, 5, 2, 20, 0, tzinfo=UTC))
+        img = render_to_image(
+            [self._widget(h=280, hours=8, show_temperature_labels=False)], cfg
+        )
+        colors = {pixel(img, 350, y) for y in range(36, 52)}
+        assert 170 not in colors
+        assert any(value < 210 for value in colors)
+
+    @pytest.mark.parametrize("levels", [4, 16])
+    def test_cloud_band_is_light_but_still_visible(self, levels: int) -> None:
+        # Cloud tint stays visible even after four-level no-dither mapping.
+        """Verify the lighter cloud band preserves visible coverage."""
+        img = render_to_image(
+            [self._widget(h=280, hours=8, show_temperature_labels=False)],
+            self._config(
+                cloud=100,
+                display_levels=levels,
+                optimize=levels == 4,
+                dither_algorithm="none",
+            ),
+        )
+        values = [
+            pixel(img, x, y) for x in range(100, 600) for y in range(36, 52)
+        ]
+        assert 225 < sum(values) / len(values) < 250
+        if levels == 4:
+            assert set(values) <= {0, 85, 170, 255}
+
+    @pytest.mark.parametrize("height", [280, 560])
+    def test_precip_label_is_inside_at_bottom(self, height: int) -> None:
+        # Ink must sit inside the bar, centered and just above its baseline.
+        """Verify proportional bottom padding for precipitation labels."""
+        img = render_to_image(
+            [self._widget(h=height, hours=8, show_temperature_labels=False)],
+            self._config(height=height, precipitation=1.5),
+        )
+        row_gap = max(1, round(height * 0.025))
+        bottom = height - 2 * row_gap - round(height * 0.075)
+        ink = img.point(lambda value: 0 if value < 80 else 255)
+        bbox = content_bbox(ink, 320, bottom - height // 5, 380, bottom)
+        assert bbox is not None
+        assert abs((bbox[0] + bbox[2]) / 2 - 350) <= 2
+        assert 1 <= bottom - bbox[3] <= round(height * 0.02)
+
+    def test_shallow_bar_has_no_inside_label(self) -> None:
+        # Small but nonzero rainfall keeps its bar without overflowing ink.
+        """Verify insufficient bar height suppresses only the text."""
+        img = render_to_image(
+            [self._widget(h=280, hours=8, show_temperature_labels=False)],
+            self._config(precipitation=0.1),
+        )
+        assert_all_white(
+            img.point(lambda v: 0 if v < 80 else 255), 320, 215, 380, 245
+        )
+        assert_has_gray_pixels(img, 320, 239, 380, 245, low=180, high=195)
 
 
 class TestMeteogramDetails:
