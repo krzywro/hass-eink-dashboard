@@ -23,6 +23,29 @@
     bar_width=bar_width,
     border_color=hex_black,
     bar_color=hex_gray) -%}
+{#- Cloud tint is below every grid separator. Four-level displays use
+    a sparse native-gray pattern, keeping the light band visible even
+    when the output palette is applied without error diffusion. -#}
+{%- if show_cloud_band -%}
+{%- if cloud_pattern -%}
+<defs>
+{#- One native-gray pixel per four pixels averages about 234 on white,
+    close to the 30% cloud tint, without inventing a fifth gray level. -#}
+<pattern id="mgCloudTint" patternUnits="userSpaceOnUse" width="2" height="2">
+<rect width="1" height="1" fill="{{ hex_hour_grid }}"/>
+</pattern>
+</defs>
+{%- endif -%}
+<path d="{{ cloud_band_path }}"
+  fill="{{ cloud_fill }}" fill-opacity="{{ cloud_opacity }}" stroke="none"/>
+{%- endif -%}
+{#- Full local-hour boundaries; independent of annotation thinning. -#}
+{%- for line in hour_grid_lines -%}
+<line x1="{{ line.x }}" y1="{{ line.y1 }}"
+      x2="{{ line.x }}" y2="{{ line.y2 }}"
+      stroke="{{ hex_hour_grid }}" stroke-width="1"
+      stroke-dasharray="4,3"/>
+{%- endfor -%}
 {#- Day-boundary markers: dashed line (all but the first) plus a
     weekday/date label. -#}
 {%- for marker in day_markers -%}
@@ -38,11 +61,6 @@
   dominant-baseline="hanging"
   fill="{{ hex_black }}">{{ marker.label }}</text>
 {%- endfor -%}
-{#- Cloud-coverage band: shaded area from the plot's top edge. -#}
-{%- if show_cloud_band -%}
-<path d="{{ cloud_band_path }}"
-  fill="{{ hex_light_gray }}" fill-opacity="0.6" stroke="none"/>
-{%- endif -%}
 {#- Y-axis gridlines and labels. -#}
 {%- for grid in grid_lines -%}
 <line x1="{{ content_left }}" y1="{{ grid.y }}"
@@ -56,9 +74,9 @@
   fill="{{ hex_text_gray }}">{{ grid.label }}</text>
 {%- endfor -%}
 {#- Precipitation bars: grow upward from the plot baseline, with
-    an optional amount label above (omitted where it would collide
-    with a neighbouring label). Drawn after the gridlines so bars
-    and their labels aren't cut through by a crossing gridline. -#}
+    optional centered amount labels inside their bottom edge. Labels
+    that cannot fit are omitted. Drawing after the grid keeps their
+    digits clear of the grid strokes. -#}
 {%- if show_precip -%}
 {%- for bar in precip_bars -%}
 <rect x="{{ bar.x }}" y="{{ bar.y }}"

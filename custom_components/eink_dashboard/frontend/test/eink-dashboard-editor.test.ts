@@ -92,11 +92,12 @@ describe("WIDGET_TYPES", () => {
     }
   });
 
-  it("meteogram enables wind and temperature labels by default", () => {
+  it("meteogram enables wind, temperature labels, and hour grid", () => {
     // New widgets use the same detail defaults as the server renderer.
     expect(WIDGET_TYPES.meteogram.defaults).toMatchObject({
       show_wind: true,
       show_temperature_labels: true,
+      show_hour_grid: true,
     });
   });
 
@@ -280,7 +281,7 @@ describe("SCHEMAS", () => {
     expect(field?.selector).toHaveProperty("boolean");
   });
 
-  it.each(["show_wind", "show_temperature_labels"])(
+  it.each(["show_wind", "show_temperature_labels", "show_hour_grid"])(
     "meteogram exposes enabled %s with a readable label",
     (name) => {
       // Both settings are flat boolean fields with documented defaults.

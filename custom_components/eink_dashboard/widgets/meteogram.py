@@ -35,6 +35,7 @@ from ..const import (
     PADDING,
     DisplayConfig,
     Widget,
+    color_to_hex,
 )
 from ..svg_render import _weather_svg_filter
 from ._helpers import (
@@ -103,6 +104,10 @@ _GRID_FONT_RATIO = 0.05
 # Y-axis gridline labels.
 _PRECIP_LABEL_FONT_RATIO = 0.05
 _CLOUD_BAND_FRAC = 0.4
+# Exact light gray from the E1001 four-level palette, shared by the
+# hourly grid and the sparse cloud tint used on four-level displays.
+_HOUR_GRID_SHADE = 170
+_CLOUD_OPACITY = 0.3
 # Precipitation bars use at most this fraction of the plot height,
 # so they stay subordinate to the temperature curve.
 _PRECIP_BAR_MAX_FRAC = 0.5
@@ -117,7 +122,7 @@ def _build_meteogram_context(
     Renders an hourly temperature curve colored by a continuous
     temperature gradient (matching the weather widget's min/max
     bar), with condition icons floating above the curve, dashed
-    day-boundary markers, an optional cloud-coverage band, optional
+    hourly grid lines, day-boundary markers, an optional cloud band, optional
     precipitation bars, temperatures below the curve, and a wind
     footer below the hour-axis ticks. Arrowheads point downwind.
 
@@ -125,7 +130,8 @@ def _build_meteogram_context(
         widget: Widget config dict.  Recognised keys: ``entity``
             (HA weather entity ID), ``hours`` (forecast window in
             hours, clamped to 8-120; default 24), ``show_cloud_cover``
-            (bool, default ``True``), ``show_precipitation`` (bool,
+            (bool, default ``True``), ``show_hour_grid`` (bool, default
+            ``True``), ``show_precipitation`` (bool,
             default ``True``), ``show_wind`` and
             ``show_temperature_labels`` (bool, both default ``True``),
             ``card_style``, ``x``, ``w``, ``h``.
@@ -354,7 +360,6 @@ def _build_meteogram_context(
             config,
             precip_font_sz,
             plot_top,
-            row_gap,
             content_left,
             content_right,
         )
@@ -390,6 +395,20 @@ def _build_meteogram_context(
         cursor += datetime.timedelta(days=1)
     day_markers = _prune_overlapping_day_markers(
         day_markers, day_label_font_sz, content_right
+    )
+    hour_grid_lines = (
+        _hour_grid_lines(
+            points,
+            tz,
+            map_x,
+            content_left,
+            content_right,
+            plot_top,
+            plot_bottom,
+            day_markers,
+        )
+        if widget.get("show_hour_grid", True)
+        else []
     )
 
     # --- Temperature curve, colored by a continuous gradient ---
@@ -484,6 +503,15 @@ def _build_meteogram_context(
         "content_right": content_right,
         "show_cloud_band": show_band,
         "cloud_band_path": cloud_band_path,
+        "cloud_pattern": display_levels == 4,
+        "cloud_fill": (
+            "url(#mgCloudTint)"
+            if display_levels == 4
+            else _color_context()["hex_light_gray"]
+        ),
+        "cloud_opacity": 1 if display_levels == 4 else _CLOUD_OPACITY,
+        "hex_hour_grid": color_to_hex(_HOUR_GRID_SHADE),
+        "hour_grid_lines": hour_grid_lines,
         "show_precip": bool(precip_bars),
         "precip_bars": precip_bars,
         "precip_font_sz": precip_font_sz,
@@ -502,6 +530,60 @@ def _build_meteogram_context(
         "wind_arrow_scale": wind_arrow_size / 20,
         "wind_speed_y": wind_speed_y,
     }
+
+
+def _hour_grid_lines(
+    points: list[tuple[float, float]],
+    tz: datetime.tzinfo,
+    map_x: Callable[[float], int],
+    left: int,
+    right: int,
+    top: int,
+    bottom: int,
+    day_markers: list[dict[str, object]],
+) -> list[dict[str, float]]:
+    """Build hourly plot separators independently of forecast sampling.
+
+    Args:
+        points: Forecast points defining the displayed time window.
+        tz: Home Assistant's configured time zone.
+        map_x: Timestamp-to-pixel mapper shared with the curve.
+        left: Plot's left edge, excluded to preserve card borders.
+        right: Plot's right edge, excluded to preserve card borders.
+        top: Plot's upper edge.
+        bottom: Plot's lower edge, above the hour labels.
+        day_markers: Existing day separators, which must not be overdrawn.
+
+    Returns:
+        Line coordinates at every full local hour inside the window.
+        Repeated hours during a clock rollback each get their own line.
+    """
+    first, last = points[0][0], points[-1][0]
+    cursor = (
+        datetime.datetime.fromtimestamp(first, tz=tz)
+        .replace(
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+        .timestamp()
+    )
+    if cursor <= first:
+        cursor += 3600
+    day_x = {int(str(m["x"])) for m in day_markers if m["show_line"]}
+    lines: list[dict[str, float]] = []
+    while cursor < last:
+        local = datetime.datetime.fromtimestamp(cursor, tz=tz)
+        x = map_x(cursor)
+        if local.minute == 0 and left < x < right and x not in day_x:
+            # A half-pixel center makes a 1px stroke occupy one whole
+            # pixel column, preserving native gray instead of blending.
+            lines.append({"x": x + 0.5, "y1": top, "y2": bottom})
+        # Advance on the real timeline so DST rollback hours are kept.
+        # If a transition changes the offset by a fraction of an hour,
+        # realign to the next full local hour before drawing again.
+        cursor += 3600 - local.minute * 60 - local.second
+    return lines
 
 
 def _finite_number(value: object) -> float | None:
@@ -945,22 +1027,17 @@ def _label_precip_bars(
     config: DisplayConfig,
     font_sz: int,
     plot_top: int,
-    row_gap: int,
     content_left: int,
     content_right: int,
 ) -> list[dict[str, object]]:
-    """Attach formatted, priority-pruned labels to precipitation bars.
+    """Attach bottom-aligned amount labels fully inside precipitation bars.
 
-    Labels are centered above their bar (``text-anchor="middle"``),
-    so two labels collide when one's right half-width reaches into
-    the next's left half-width. When labels collide, the bar with
-    the higher precipitation value keeps its label -- a bar whose
-    label loses out, or would overflow the content area, still
-    draws its bar, but gets an empty ``"label"`` so no colliding or
-    overhanging text is rendered. Values that format to all-zero
-    digits at the display precision (e.g. a 0.01mm drizzle reading
-    formatting to "0.0") are also left unlabeled, since a visible
-    bar next to a "0.0" label would be misleading.
+    Labels are centered horizontally and inset from the bottom by a
+    font-relative padding. Ink bounds, measured with a baseline anchor,
+    must fit inside the bar on all sides. Bars too small for their label
+    remain at their original size and are left unlabeled. Values that
+    round to zero are also unlabeled. When irregular forecasts produce
+    overlapping bars, the higher precipitation value keeps its label.
 
     Args:
         precip_bars: Bar dicts from ``_compute_precip_bars()``, in
@@ -970,8 +1047,7 @@ def _label_precip_bars(
             formatting via ``_fmt()``.
         font_sz: Precipitation label font size in pixels.
         plot_top: Y pixel coordinate of the plot's top edge, used
-            to keep labels from being clipped above the plot.
-        row_gap: Vertical gap between a bar's top and its label.
+            to keep labels inside the visible plot.
         content_left: X pixel coordinate of the plot's left edge,
             used to drop labels that would overhang it.
         content_right: X pixel coordinate of the plot's right edge,
@@ -987,10 +1063,11 @@ def _label_precip_bars(
     # Bold to match the template's font-weight="bold", so measured
     # widths reflect what actually renders.
     font = _load_font(font_sz, bold=True)
+    padding = max(2, round(font_sz * 0.15))
 
     # Candidate labels that could be placed: (index, value, left,
     # right, label, label_x, label_y). Bars that format to zero or
-    # would overhang the content area are excluded up front, since
+    # would overhang their bar are excluded up front, since
     # they can never win a placement regardless of priority.
     candidates: list[tuple[int, float, float, float, str, int, int]] = []
     for i, bar in enumerate(precip_bars):
@@ -1004,21 +1081,26 @@ def _label_precip_bars(
         bar_x = cast("int", bar["x"])
         bar_w = cast("int", bar["w"])
         center = bar_x + bar_w / 2
-        left_edge = center - half_w
-        right_edge = center + half_w
-
-        # No gap here: matches _prune_overlapping_day_markers()'s
-        # strict edge check -- touching exactly is not overflow.
-        if left_edge < content_left or right_edge > content_right:
+        label_x = round(center)
+        ink_left, ink_top, ink_right, ink_bottom = font.getbbox(
+            label, anchor="ls"
+        )
+        left_edge = label_x - half_w + ink_left
+        right_edge = label_x - half_w + ink_right
+        bar_y = cast("int", bar["y"])
+        bar_h = cast("int", bar["h"])
+        # Font bounds use the text baseline, matching SVG's automatic
+        # baseline. Subtracting ink_bottom keeps the visible glyphs,
+        # including any descenders, at the requested bottom inset.
+        label_y = round(bar_y + bar_h - padding - ink_bottom)
+        if (
+            left_edge < max(content_left, bar_x) + padding
+            or right_edge > min(content_right, bar_x + bar_w) - padding
+            or label_y + ink_top < max(plot_top, bar_y) + padding
+        ):
             continue
-
-        # Safeguard: with _PRECIP_BAR_MAX_FRAC = 0.5 a bar's top
-        # can't rise above the plot's midpoint, so this clamp
-        # doesn't trigger today, but it guards against future
-        # changes to that fraction or very short plot heights.
-        label_y = max(cast("int", bar["y"]) - row_gap, plot_top + font_sz)
         candidates.append(
-            (i, value, left_edge, right_edge, label, round(center), label_y)
+            (i, value, left_edge, right_edge, label, label_x, label_y)
         )
 
     # Place labels in descending precipitation order, so the most

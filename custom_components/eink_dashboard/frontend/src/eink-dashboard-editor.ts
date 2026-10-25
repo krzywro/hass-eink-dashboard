@@ -260,6 +260,7 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
     icon: "mdi:weather-cloudy",
     defaults: {
       type: "meteogram",
+      show_hour_grid: true,
       show_wind: true,
       show_temperature_labels: true,
       x: 24,
@@ -1808,6 +1809,11 @@ export const SCHEMAS: Record<
           selector: { boolean: {} },
         },
         {
+          name: "show_hour_grid",
+          default: true,
+          selector: { boolean: {} },
+        },
+        {
           name: "show_precipitation",
           default: true,
           selector: { boolean: {} },
@@ -1971,6 +1977,7 @@ export const LABELS: Record<string, string> = {
   y_axis_3: "Third entity Y axis",
   hours: "Hours to show",
   show_cloud_cover: "Show cloud cover",
+  show_hour_grid: "Show hourly grid",
   show_precipitation: "Show precipitation",
   show_temperature_labels: "Show temperature labels",
   show_wind: "Show wind",
