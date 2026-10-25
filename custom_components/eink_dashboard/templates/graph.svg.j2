@@ -53,7 +53,7 @@
   font-weight="500"
   font-size="{{ name_font_sz }}"
   dominant-baseline="central"
-  fill="{{ hex_gray }}">{{ name_text }}</text>
+  fill="{{ hex_text_gray }}">{{ name_text }}</text>
 {%- endif -%}
 {%- if not hide_state -%}
 <text
@@ -71,7 +71,7 @@
   font-family="Roboto"
   font-size="{{ unit_font_sz }}"
   dominant-baseline="central"
-  fill="{{ hex_gray }}">{{ unit_text }}</text>
+  fill="{{ hex_text_gray }}">{{ unit_text }}</text>
 {%- endif -%}
 {%- endif -%}
 {#- Graph area: grid, fills, lines, labels, extrema, legend. -#}
@@ -142,12 +142,12 @@
   font-family="Roboto"
   font-size="{{ label_font_sz }}"
   dominant-baseline="hanging"
-  fill="{{ hex_gray }}">{{ y_max_str }}</text>
+  fill="{{ hex_text_gray }}">{{ y_max_str }}</text>
 <text x="{{ y_label_x }}" y="{{ y_min_label_y }}"
   font-family="Roboto"
   font-size="{{ label_font_sz }}"
   dominant-baseline="auto"
-  fill="{{ hex_gray }}">{{ y_min_str }}</text>
+  fill="{{ hex_text_gray }}">{{ y_min_str }}</text>
 {#- X-axis labels: oldest time left, newest time right.
     Suppressed on very short widgets (x_oldest_str is empty). -#}
 {%- if x_oldest_str -%}
@@ -155,7 +155,7 @@
   font-family="Roboto"
   font-size="{{ label_font_sz }}"
   dominant-baseline="hanging"
-  fill="{{ hex_gray }}">{{ x_oldest_str }}</text>
+  fill="{{ hex_text_gray }}">{{ x_oldest_str }}</text>
 {%- endif -%}
 {%- if x_newest_str -%}
 <text x="{{ x_label_right }}" y="{{ x_label_y }}"
@@ -163,7 +163,7 @@
   font-size="{{ label_font_sz }}"
   text-anchor="end"
   dominant-baseline="hanging"
-  fill="{{ hex_gray }}">{{ x_newest_str }}</text>
+  fill="{{ hex_text_gray }}">{{ x_newest_str }}</text>
 {%- endif -%}
 {%- endif -%}
 {#- Secondary Y-axis labels: right side, separate scale. -#}
@@ -173,13 +173,13 @@
   font-size="{{ label_font_sz }}"
   text-anchor="end"
   dominant-baseline="hanging"
-  fill="{{ hex_gray }}">{{ y2_max_str }}</text>
+  fill="{{ hex_text_gray }}">{{ y2_max_str }}</text>
 <text x="{{ y2_label_right_x }}" y="{{ y2_min_label_y }}"
   font-family="Roboto"
   font-size="{{ label_font_sz }}"
   text-anchor="end"
   dominant-baseline="auto"
-  fill="{{ hex_gray }}">{{ y2_min_str }}</text>
+  fill="{{ hex_text_gray }}">{{ y2_min_str }}</text>
 {%- endif -%}
 {#- Extrema: min/max values with timestamps below the graph. -#}
 {%- if show_extrema -%}
@@ -187,13 +187,13 @@
   font-family="Roboto"
   font-size="{{ extrema_font_sz }}"
   dominant-baseline="hanging"
-  fill="{{ hex_gray }}">{{ extrema_min_str }}</text>
+  fill="{{ hex_text_gray }}">{{ extrema_min_str }}</text>
 <text x="{{ extrema_right }}" y="{{ extrema_y }}"
   font-family="Roboto"
   font-size="{{ extrema_font_sz }}"
   text-anchor="end"
   dominant-baseline="hanging"
-  fill="{{ hex_gray }}">{{ extrema_max_str }}</text>
+  fill="{{ hex_text_gray }}">{{ extrema_max_str }}</text>
 {%- endif -%}
 {#- Legend: one swatch + label per entity (multi-entity only). -#}
 {%- if show_legend -%}
@@ -218,7 +218,7 @@
   font-family="Roboto"
   font-size="{{ entry.font_sz }}"
   dominant-baseline="central"
-  fill="{{ hex_gray }}">{{ entry.name }}</text>
+  fill="{{ hex_text_gray }}">{{ entry.name }}</text>
 {%- endfor -%}
 {%- endif -%}
 {%- endif -%}

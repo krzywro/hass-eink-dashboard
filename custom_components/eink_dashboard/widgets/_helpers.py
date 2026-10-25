@@ -44,6 +44,7 @@ from ..const import (
     COLOR_BLACK,
     COLOR_GRAY,
     COLOR_LIGHT_GRAY,
+    COLOR_TEXT_GRAY,
     COLOR_WHITE,
     DEFAULT_CARD_STYLE,
     DEFAULT_DIVIDER_W,
@@ -123,13 +124,14 @@ def _color_context() -> dict[str, str]:
 
     Returns:
         Dict mapping ``hex_black``, ``hex_white``,
-        ``hex_gray``, and ``hex_light_gray`` to their
+        ``hex_gray``, ``hex_text_gray``, and ``hex_light_gray`` to their
         SVG hex color strings.
     """
     return {
         "hex_black": color_to_hex(COLOR_BLACK),
         "hex_white": color_to_hex(COLOR_WHITE),
         "hex_gray": color_to_hex(COLOR_GRAY),
+        "hex_text_gray": color_to_hex(COLOR_TEXT_GRAY),
         "hex_light_gray": color_to_hex(COLOR_LIGHT_GRAY),
     }
 

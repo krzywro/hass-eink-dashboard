@@ -53,7 +53,7 @@
   font-family="Roboto"
   font-size="{{ grid_font_sz }}"
   dominant-baseline="auto"
-  fill="{{ hex_gray }}">{{ grid.label }}</text>
+  fill="{{ hex_text_gray }}">{{ grid.label }}</text>
 {%- endfor -%}
 {#- Precipitation bars: grow upward from the plot baseline, with
     an optional amount label above (omitted where it would collide
@@ -105,7 +105,7 @@
   font-size="{{ hour_font_sz }}"
   text-anchor="{{ tick.anchor }}"
   dominant-baseline="hanging"
-  fill="{{ hex_gray }}">{{ tick.label }}</text>
+  fill="{{ hex_text_gray }}">{{ tick.label }}</text>
 {%- endfor -%}
 {#- Forecast wind below the hours: arrowhead points downwind, with
     speed and the entity's unit underneath. Calm has no arrow. -#}
@@ -120,7 +120,7 @@
 <text x="{{ wind.arrow_x }}" y="{{ wind_arrow_y }}"
   font-family="Roboto" font-size="{{ detail_font_sz }}"
   text-anchor="middle" dominant-baseline="central"
-  fill="{{ hex_gray }}">—</text>
+  fill="{{ hex_text_gray }}">—</text>
 {%- endif -%}
 <text x="{{ wind.x }}" y="{{ wind_speed_y }}"
   font-family="Roboto" font-size="{{ detail_font_sz }}"

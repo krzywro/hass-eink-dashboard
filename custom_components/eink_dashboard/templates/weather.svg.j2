@@ -64,7 +64,7 @@
   font-size="{{ font_sm }}"
   text-anchor="end"
   dominant-baseline="hanging"
-  fill="{{ hex_gray }}">{{ lo_text }}</text>
+  fill="{{ hex_text_gray }}">{{ lo_text }}</text>
 {%- endif -%}
 {%- if precip_text -%}
 <text
@@ -73,7 +73,7 @@
   font-size="{{ font_xs }}"
   text-anchor="end"
   dominant-baseline="hanging"
-  fill="{{ hex_gray }}">{{ precip_text }}</text>
+  fill="{{ hex_text_gray }}">{{ precip_text }}</text>
 {%- endif -%}
 {# Detail row: icon + text pairs for each weather attribute. #}
 {%- for d in detail_items -%}
@@ -95,7 +95,7 @@
   font-size="{{ feels_like_font_size }}"
   text-anchor="middle"
   dominant-baseline="central"
-  fill="{{ hex_gray }}">{{ feels_like_text }}</text>
+  fill="{{ hex_text_gray }}">{{ feels_like_text }}</text>
 {%- endif -%}
 {# "current" mode date string, centred below the detail row. #}
 {%- if date_text -%}
@@ -105,7 +105,7 @@
   font-size="{{ font_sm }}"
   text-anchor="middle"
   dominant-baseline="central"
-  fill="{{ hex_gray }}">{{ date_text }}</text>
+  fill="{{ hex_text_gray }}">{{ date_text }}</text>
 {%- endif -%}
 {# "current" mode today min/max gradient bar. #}
 {%- if show_bar -%}
@@ -152,7 +152,7 @@
   font-size="{{ font_sm }}"
   text-anchor="middle"
   dominant-baseline="hanging"
-  fill="{{ hex_gray }}">{{ day.label }}</text>
+  fill="{{ hex_text_gray }}">{{ day.label }}</text>
 {%- if day.icon_svg -%}
 <g transform="translate({{ day.icon_x }}, {{ day.icon_y }})">{{ day.icon_svg }}</g>
 {%- endif -%}
@@ -172,7 +172,7 @@
   font-size="{{ font_sm }}"
   text-anchor="middle"
   dominant-baseline="hanging"
-  fill="{{ hex_gray }}">{{ day.lo }}</text>
+  fill="{{ hex_text_gray }}">{{ day.lo }}</text>
 {%- endif -%}
 {%- if day.precip -%}
 <text
@@ -181,7 +181,7 @@
   font-size="{{ font_xs }}"
   text-anchor="middle"
   dominant-baseline="hanging"
-  fill="{{ hex_gray }}">{{ day.precip }}</text>
+  fill="{{ hex_text_gray }}">{{ day.precip }}</text>
 {%- endif -%}
 {%- endfor -%}
 {%- endif -%}

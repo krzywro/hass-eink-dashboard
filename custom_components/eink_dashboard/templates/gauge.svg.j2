@@ -69,7 +69,7 @@
   font-size="{{ unit_font_sz }}"
   text-anchor="middle"
   dominant-baseline="hanging"
-  fill="{{ hex_gray }}">{{ unit_text }}</text>
+  fill="{{ hex_text_gray }}">{{ unit_text }}</text>
 {%- endif -%}
 {# Segment label: describes the matching value range. #}
 {%- if segment_label -%}
@@ -79,7 +79,7 @@
   font-size="{{ seg_label_font_sz }}"
   text-anchor="middle"
   dominant-baseline="hanging"
-  fill="{{ hex_gray }}">{{ segment_label }}</text>
+  fill="{{ hex_text_gray }}">{{ segment_label }}</text>
 {%- endif -%}
 {# Name label at top or bottom depending on header_position. #}
 <text
@@ -88,7 +88,7 @@
   font-size="{{ name_font_sz }}"
   text-anchor="middle"
   dominant-baseline="central"
-  fill="{{ hex_gray }}">{{ name_text }}</text>
+  fill="{{ hex_text_gray }}">{{ name_text }}</text>
 {%- endcall -%}
 {%- endif -%}
 </svg>

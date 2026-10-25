@@ -54,6 +54,8 @@ PADDING = 24
 COLOR_BLACK = 0
 COLOR_WHITE = 255
 COLOR_GRAY = 120
+# Use an exact four-level palette shade so text interiors stay uniform.
+COLOR_TEXT_GRAY = 85
 COLOR_MEDIUM_GRAY = 150
 COLOR_LIGHT_GRAY = 180
 

@@ -21,6 +21,7 @@ from datetime import datetime
 from ..const import (
     COLOR_BLACK,
     COLOR_GRAY,
+    COLOR_TEXT_GRAY,
     DEFAULT_CARD_STYLE,
     DEFAULT_ROW_H,
     PADDING,
@@ -197,7 +198,7 @@ def _build_calendar_context(
                 "icon_svg": icon_svg,
                 "icon_outline": use_outline,
                 "icon_fill": icon_fill,
-                "secondary_fill": color_to_hex(COLOR_GRAY),
+                "secondary_fill": color_to_hex(COLOR_TEXT_GRAY),
                 "value_fill": value_fill,
                 "letter": "",
             }

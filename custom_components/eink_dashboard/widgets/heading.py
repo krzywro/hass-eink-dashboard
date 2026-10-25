@@ -148,7 +148,7 @@ def _build_heading_context(
     font_sz = m.font_primary if is_title else m.font_secondary
     font_weight = "500" if is_title else "400"
     colors = _color_context()
-    text_fill = colors["hex_black"] if is_title else colors["hex_gray"]
+    text_fill = colors["hex_black"] if is_title else colors["hex_text_gray"]
 
     # Icon resolution: glyph size depends on circle style.
     icon_outline, icon_no_circle = _resolve_icon_style(
