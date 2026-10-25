@@ -92,12 +92,13 @@ describe("WIDGET_TYPES", () => {
     }
   });
 
-  it("meteogram enables wind, temperature labels, and hour grid", () => {
+  it("meteogram enables forecast details and axis labels", () => {
     // New widgets use the same detail defaults as the server renderer.
     expect(WIDGET_TYPES.meteogram.defaults).toMatchObject({
       show_wind: true,
       show_temperature_labels: true,
       show_hour_grid: true,
+      show_y_axis_labels: true,
     });
   });
 
@@ -281,10 +282,13 @@ describe("SCHEMAS", () => {
     expect(field?.selector).toHaveProperty("boolean");
   });
 
-  it.each(["show_wind", "show_temperature_labels", "show_hour_grid"])(
+  it.each([
+    "show_wind", "show_temperature_labels", "show_hour_grid",
+    "show_y_axis_labels",
+  ])(
     "meteogram exposes enabled %s with a readable label",
     (name) => {
-      // Both settings are flat boolean fields with documented defaults.
+      // These settings are flat boolean fields with documented defaults.
       const field = findField(SCHEMAS.meteogram(DISPLAY), name);
       expect(field?.default).toBe(true);
       expect(field?.selector).toHaveProperty("boolean");

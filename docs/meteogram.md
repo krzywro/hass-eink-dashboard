@@ -1,7 +1,7 @@
 # Meteogram
 
 The Meteogram widget uses an hourly forecast from a Home Assistant
-`weather` entity. It shows weather icons above a temperature curve,
+`weather` entity. It shows weather icons above a black temperature curve,
 numeric temperatures below it, and optional precipitation bars and
 cloud coverage. Below the chart are the hours, wind direction arrows,
 and wind speeds with units.
@@ -18,6 +18,7 @@ hourly forecasts. The default widget size is 400 × 280 pixels.
 | `show_precipitation` | `true` | Precipitation bars with amount labels |
 | `show_cloud_cover` | `true` | Cloud coverage band above the curve |
 | `show_hour_grid` | `true` | Dashed lines at full local hours |
+| `show_y_axis_labels` | `true` | Numeric temperature scale on the Y axis |
 | `card_style` | `none` | `none`, `border`, or `left_bar` decoration |
 
 Forecast annotations use the same timestamps. They appear at least
@@ -34,6 +35,12 @@ precipitation amounts. A label is omitted if it cannot fit inside the
 plot. Increasing the widget's width or reducing the forecast window
 allows more detail to be shown. Wind space is included within the
 configured widget height.
+
+The temperature curve is solid black for maximum contrast on e-ink.
+Disable **Show Y-axis labels** (`show_y_axis_labels: false`) to hide the
+numeric vertical scale. Horizontal grid lines and forecast temperature
+labels remain available, and the hidden scale no longer reserves space
+beside the first temperature label.
 
 ## Hourly grid, clouds, and precipitation
 

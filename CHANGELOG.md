@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Meteogram **Show Y-axis labels** switch (`show_y_axis_labels`, enabled
+  by default) controls the numeric vertical scale independently of the grid.
 - Meteogram dashed hourly grid in native four-level light gray,
   including local-hour alignment through daylight-saving changes.
   The **Show hourly grid** switch (`show_hour_grid`, enabled by default)
@@ -16,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Meteogram temperature curve is solid black for stronger e-ink contrast.
 - Meteogram cloud coverage uses a lighter tint. Four-level displays
   retain visible clouds without requiring output dithering.
 - Precipitation amounts sit inside the bottom of their meteogram bars,

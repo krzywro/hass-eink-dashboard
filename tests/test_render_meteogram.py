@@ -394,11 +394,7 @@ class TestRenderMeteogram:
         img = render_to_image([widget], self._config())
         assert_all_white(img, 0, 0, 700, 300)
 
-    # ── Meteogram-specific content (SVG-string assertions, mirrors
-    #    TestRenderGraph's use of render_widget_svg for content
-    #    checks that don't depend on grayscale pixel luminance —
-    #    the temperature curve is colored by a gradient, so warm
-    #    segments render too light for reliable dark-pixel checks) ──
+    # ── Meteogram-specific content and geometry ───────────────────────
 
     def test_meteogram_draws_temperature_curve(self) -> None:
         # A stroked, unfilled path renders the temperature curve —
@@ -853,6 +849,46 @@ class TestMeteogramGridAndPrecipitation:
             **overrides,
         )
 
+    @pytest.mark.parametrize("levels", [4, 16, 256])
+    def test_temperature_curve_is_black(self, levels: int) -> None:
+        # A constant forecast produces a continuous solid black stroke.
+        """Verify temperature contrast independently of display levels."""
+        img = render_to_image(
+            [self._widget(h=280, hours=8, show_temperature_labels=False)],
+            self._config(display_levels=levels),
+        )
+        assert any(
+            all(pixel(img, x, y) == 0 for x in range(200, 500))
+            for y in range(85, 220)
+        )
+
+    def test_y_axis_labels_enabled_by_default(self) -> None:
+        # Existing widgets retain their numeric vertical scale.
+        """Verify omitted and enabled vertical labels render identically."""
+        cfg = self._config()
+        assert render_dashboard(
+            [self._widget(h=280, hours=8)], cfg
+        ) == render_dashboard(
+            [self._widget(h=280, hours=8, show_y_axis_labels=True)], cfg
+        )
+
+    def test_y_axis_labels_can_be_disabled(self) -> None:
+        # Only the labels disappear; grid and curve geometry stay intact.
+        """Verify the vertical-label switch preserves the plot."""
+        cfg = self._config()
+        widget = self._widget(h=280, hours=8, show_temperature_labels=False)
+        enabled = render_to_image([widget], cfg)
+        disabled = render_to_image(
+            [{**widget, "show_y_axis_labels": False}], cfg
+        )
+        difference = ImageChops.difference(enabled, disabled).getbbox()
+        assert difference is not None
+        assert difference[2] < 50
+        assert (
+            enabled.crop((50, 0, 700, 280)).tobytes()
+            == disabled.crop((50, 0, 700, 280)).tobytes()
+        )
+
     def test_hour_grid_enabled_by_default(self) -> None:
         # Saved widgets without the new option keep the current hour grid.
         """Verify omitted and explicitly enabled hourly grids match."""
@@ -1049,7 +1085,19 @@ class TestMeteogramDetails:
         # Black labels appear inside the plot away from axis/grid labels.
         """Verify temperature labels below flat curve."""
         img = render_to_image([self._widget()], self._detail_config())
-        assert_has_dark_pixels(img, 200, 100, 500, 190, threshold=80)
+        curve_bottom = max(
+            y
+            for y in range(80, 185)
+            if all(pixel(img, x, y) == 0 for x in range(200, 500))
+        )
+        assert_has_dark_pixels(
+            img,
+            200,
+            curve_bottom + 2,
+            500,
+            curve_bottom + 35,
+            threshold=80,
+        )
 
     def test_temperature_toggle_changes_render_without_conditions(
         self,

@@ -1350,8 +1350,14 @@ export interface MeteogramWidget extends WidgetBase {
   hours?: number;
   /** Show the cloud-coverage band above the curve. Default: true. */
   show_cloud_cover?: boolean;
-  /** Show dashed hourly grid lines. Default: true; day markers stay visible. */
+  /**
+   * Show dashed hourly grid lines. Default: true; day markers stay visible.
+   */
   show_hour_grid?: boolean;
+  /**
+   * Show numeric Y-axis labels; horizontal grid stays visible. Default: true.
+   */
+  show_y_axis_labels?: boolean;
   /** Show precipitation bars below the curve. Default: true. */
   show_precipitation?: boolean;
   /** Show numeric temperatures below the curve. Default: true. */

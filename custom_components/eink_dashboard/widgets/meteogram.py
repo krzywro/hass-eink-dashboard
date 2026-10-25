@@ -43,12 +43,10 @@ from ._helpers import (
     _color_context,
     _fmt,
     _resolve_tz,
-    _temp_gradient_stops,
     _widget_dim,
 )
 from .graph import (
     _extract_attribute_points,
-    _maybe_grayscale_stops,
     _parse_attribute_timestamp,
     _smooth_fill,
     _smooth_path,
@@ -119,19 +117,19 @@ def _build_meteogram_context(
 ) -> dict[str, object]:
     """Build Jinja2 template context for the meteogram widget.
 
-    Renders an hourly temperature curve colored by a continuous
-    temperature gradient (matching the weather widget's min/max
-    bar), with condition icons floating above the curve, dashed
-    hourly grid lines, day-boundary markers, an optional cloud band, optional
-    precipitation bars, temperatures below the curve, and a wind
-    footer below the hour-axis ticks. Arrowheads point downwind.
+    Renders an hourly temperature curve in solid black, with condition
+    icons above the curve, dashed hourly grid lines, day-boundary markers,
+    optional vertical-axis labels, cloud coverage and precipitation bars,
+    temperatures below the curve, and a wind footer below the hour-axis
+    ticks. Arrowheads point downwind.
 
     Args:
         widget: Widget config dict.  Recognised keys: ``entity``
             (HA weather entity ID), ``hours`` (forecast window in
             hours, clamped to 8-120; default 24), ``show_cloud_cover``
             (bool, default ``True``), ``show_hour_grid`` (bool, default
-            ``True``), ``show_precipitation`` (bool,
+            ``True``), ``show_y_axis_labels`` (bool, default ``True``),
+            ``show_precipitation`` (bool,
             default ``True``), ``show_wind`` and
             ``show_temperature_labels`` (bool, both default ``True``),
             ``card_style``, ``x``, ``w``, ``h``.
@@ -154,6 +152,7 @@ def _build_meteogram_context(
     show_cloud_cover = bool(widget.get("show_cloud_cover", True))
     show_precipitation = bool(widget.get("show_precipitation", True))
     show_temperature_labels = bool(widget.get("show_temperature_labels", True))
+    show_y_axis_labels = bool(widget.get("show_y_axis_labels", True))
 
     entity: str = widget.get("entity", "")
     states_dict: dict[str, Any] = config.get("states", {})
@@ -411,13 +410,9 @@ def _build_meteogram_context(
         else []
     )
 
-    # --- Temperature curve, colored by a continuous gradient ---
+    # --- Temperature curve ---
     curve_pts = [(map_x(t), map_y(v)) for t, v in points]
     curve_path = _smooth_path(curve_pts)
-    sample_temps = [_sample_by_time(points, i / 16) for i in range(17)]
-    curve_stops = _maybe_grayscale_stops(
-        _temp_gradient_stops(sample_temps), config
-    )
 
     # --- Condition icons, floating above the curve ---
     icons: list[dict[str, object]] = []
@@ -477,7 +472,7 @@ def _build_meteogram_context(
             content_right,
             precip_bars,
             precip_font_sz,
-            grid_lines,
+            grid_lines if show_y_axis_labels else [],
             grid_font_sz,
         )
         if show_temperature_labels
@@ -494,9 +489,9 @@ def _build_meteogram_context(
         "m_radius": m.radius,
         **_color_context(),
         "curve_path": curve_path,
-        "curve_stops": curve_stops,
         "curve_stroke_w": curve_stroke_w,
         "grid_lines": grid_lines,
+        "show_y_axis_labels": show_y_axis_labels,
         "grid_font_sz": grid_font_sz,
         "grid_stroke_w": grid_stroke_w,
         "content_left": content_left,
@@ -810,7 +805,7 @@ def _temperature_labels(
         # At the first column, move text just past the Y-axis labels.
         # Moving it down instead would cascade through every grid label
         # and detach the reading from its temperature curve.
-        if column["anchor"] == "start":
+        if column["anchor"] == "start" and grid_lines:
             x_left = max(x_left, axis_right + gap)
             x = x_left
         x_right = x_left + width
@@ -1138,31 +1133,6 @@ def _label_precip_bars(
             new_bar["label"] = ""
         labeled.append(new_bar)
     return labeled
-
-
-def _sample_by_time(points: list[tuple[float, float]], frac: float) -> float:
-    """Linearly interpolate a temperature at a time fraction.
-
-    Interpolates by timestamp rather than list index, so the
-    result matches the time-linear ``map_x()`` placement of the
-    curve even when forecast points are irregularly spaced.
-
-    Args:
-        points: ``(timestamp, temperature)`` pairs, sorted by
-            timestamp.
-        frac: Position to sample, in ``[0, 1]``, as a fraction of
-            the time span from the first to the last point.
-
-    Returns:
-        Interpolated temperature at ``frac``.
-    """
-    target = points[0][0] + frac * (points[-1][0] - points[0][0])
-    for (t0, v0), (t1, v1) in pairwise(points):
-        if t1 >= target:
-            span = t1 - t0
-            t = (target - t0) / span if span > 0 else 0.0
-            return v0 + (v1 - v0) * t
-    return points[-1][1]
 
 
 def _day_label(d: datetime.date, language: str) -> str:
