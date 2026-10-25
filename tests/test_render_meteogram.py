@@ -701,7 +701,12 @@ class TestRenderMeteogram:
         # template only uses for precip labels (day labels use
         # dominant-baseline="hanging"; grid labels have no
         # text-anchor).
-        svg = render_widget_svg(self._widget(hours=24), self._config())
+        """Verify amount labels render when bars have ample width."""
+        # Leave enough room for the text and its insets instead of
+        # relying on an exact fit at a particular font measurement.
+        svg = render_widget_svg(
+            self._widget(w=1000, hours=24), self._config(width=1000)
+        )
         labels = re.findall(
             r'<text[^>]*text-anchor="middle"[^>]*'
             r'dominant-baseline="auto"[^>]*>([^<]*)</text>',
@@ -729,7 +734,7 @@ class TestRenderMeteogram:
         # Multi-day bars remain visible when no amount fits inside them.
         """Verify narrow multi-day bars omit overflowing amount labels."""
         widget = self._widget(w=300, hours=120)
-        config = self._config()
+        config = self._config(width=300)
         svg = render_widget_svg(widget, config)
         bar_count = len(re.findall(r'<rect[^>]*fill-opacity="0.5"', svg))
         label_count = len(
@@ -742,13 +747,16 @@ class TestRenderMeteogram:
         assert bar_count > 0
         assert label_count == 0
 
-    def test_meteogram_narrow_bars_keep_geometry_without_labels(self) -> None:
+    @pytest.mark.parametrize("width", [200, 300])
+    def test_meteogram_narrow_bars_keep_geometry_without_labels(
+        self, width: int
+    ) -> None:
         # Neither label fits inside its narrow bar; both bars remain.
         """Verify narrow precipitation bars do not overhang with text."""
         widget = self._widget(
-            w=300, entity="weather.priority_precip", hours=24
+            w=width, entity="weather.priority_precip", hours=24
         )
-        svg = render_widget_svg(widget, self._config())
+        svg = render_widget_svg(widget, self._config(width=width))
         labels = re.findall(
             r'<text[^>]*text-anchor="middle"[^>]*'
             r'dominant-baseline="auto"[^>]*>([^<]*)</text>',
