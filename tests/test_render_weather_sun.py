@@ -70,6 +70,35 @@ class TestWeatherSunTimes:
             [{**widget, "show_sun_times": False}], self._config()
         )
 
+    @pytest.mark.parametrize("show_sun_times", [False, True])
+    @pytest.mark.parametrize("width", [460, 620])
+    @pytest.mark.parametrize("temperature", [7, 11.7])
+    def test_temperature_is_horizontally_centered(
+        self, show_sun_times: bool, width: int, temperature: float
+    ) -> None:
+        # Short and long temperatures stay on the widget's center axis.
+        config = self._config(
+            states={
+                **self._DEFAULTS["states"],
+                "weather.home": {
+                    **MOCK_WEATHER_STATE["weather.home"],
+                    "attributes": {
+                        **MOCK_WEATHER_STATE["weather.home"]["attributes"],
+                        "temperature": temperature,
+                    },
+                },
+            }
+        )
+        widget = {
+            **self._WIDGET,
+            "w": width,
+            "show_sun_times": show_sun_times,
+        }
+        img = render_to_image([widget], config)
+        bbox = content_bbox(img, 100, 10, width - 120, 90)
+        assert bbox is not None
+        assert abs((bbox[0] + bbox[2]) / 2 - width / 2) <= 3
+
     def test_replaces_only_the_top_right_column(self) -> None:
         # Sun times replace hi/lo/precip while the bar and details stay put.
         sun = render_to_image([self._WIDGET], self._config())

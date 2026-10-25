@@ -107,6 +107,7 @@ class _SunLayout:
     icon_right_pad: int  # Gap between the weather icon and temperature.
     temp_font_size: int  # Large temperature size after width fitting.
     font_size: int  # Time label size after width fitting.
+    left: int  # Left boundary reserved for the sun column.
     items: list[dict[str, object]]  # Icon and text positions for both rows.
 
 
@@ -246,7 +247,7 @@ def _build_sun_layout(
             }
         )
     return _SunLayout(
-        icon_size, icon_right_pad, temp_font_size, font_size, items
+        icon_size, icon_right_pad, temp_font_size, font_size, left, items
     )
 
 
@@ -799,6 +800,27 @@ def _build_weather_context(
                 today_precip,
             )
         )
+    )
+    font_xs = _load_font(round(_WX_FONT_XS * scale))
+    hilo_width = max(
+        round(font_sm.getlength(today_hi)),
+        round(font_sm.getlength(today_lo)),
+        round(font_xs.getlength(today_precip)),
+    )
+    temp_right = (
+        sun_layout.left - icon_right_pad
+        if sun_layout
+        else hilo_right - hilo_width - pad
+    )
+    temp_width = _load_font(font_xl_size, bold=True).getlength(temp_text)
+    # Center on the content axis, clamping to the space between columns.
+    # Measure the final font size because width fitting can shrink it.
+    temp_x = max(
+        temp_x,
+        min(
+            content_left + (content_w - temp_width) / 2,
+            temp_right - temp_width,
+        ),
     )
 
     # row1_bottom mirrors PIL's max() between icon bottom and
